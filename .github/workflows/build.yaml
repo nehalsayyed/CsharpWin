@@ -1,0 +1,32 @@
+name: Build Windows EXE
+
+on:
+  push:
+
+jobs:
+  build:
+    name: Build EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'  # Match your target framework
+
+      - name: Restore dependencies
+        run: dotnet restore MyWindowsApp.csproj
+
+      - name: Build EXE
+        run: dotnet publish MyWindowsApp.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app-exe
+          path: bin/Release/net8.0-windows/win-x64/publish/*.exe
