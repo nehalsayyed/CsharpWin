@@ -1,32 +1,27 @@
-name: Build Windows EXE
+name: Build C GUI App
 
 on:
   push:
 
 jobs:
   build:
-    name: Build EXE
-    runs-on: windows-latest
+    name: Compile GTK App
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
+      - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'  # Match your target framework
+      - name: Install GTK dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev build-essential
 
-      - name: Restore dependencies
-        run: dotnet restore MyWindowsApp.csproj
+      - name: Compile C GUI
+        run: gcc src/main.c -o myguiapp `pkg-config --cflags --libs gtk+-3.0`
 
-      - name: Build EXE
-        run: dotnet publish MyWindowsApp.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
-
-      - name: Upload EXE artifact
+      - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: windows-app-exe
-          path: bin/Release/net8.0-windows/win-x64/publish/*.exe
+          name: gtk-linux-executable
+          path: myguiapp
