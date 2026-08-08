@@ -1,46 +1,113 @@
-name: CI
+name: Build Expo Inline Module APK
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Build and Test
+  build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # 1. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Download Zig
+      # 2. Setup Java JDK
+      - name: Setup Java JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 4. Initialize Expo Project
+      - name: Create New Expo App
         run: |
-          wget https://ziglang.org/download/0.9.1/zig-linux-x86_64-0.9.1.tar.xz
-          tar -xvf zig-linux-x86_64-0.9.1.tar.xz
-          echo "$PWD/zig-linux-x86_64-0.9.1" >> $GITHUB_PATH
+          npx create-expo-app@latest my-expo-app --template blank --yes
+          cd my-expo-app
+          npm install
 
-      - name: Install QEMU & Tools
+      # 5. Configure Inline Modules & Native Code
+      - name: Configure Inline Modules
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 mtools --fix-missing
+          cd my-expo-app
 
-      - name: Check formatting
-        run: zig fmt --check src
+          # Enable inlineModules watching the "native" folder
+          node -e '
+            const fs = require("fs");
+            const appJson = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            appJson.expo.experiments = { inlineModules: { watchedDirectories: ["native"] } };
+            fs.writeFileSync("app.json", JSON.stringify(appJson, null, 2));
+          '
 
-      - name: Build kernel
-        run: zig build
+          mkdir -p native
 
-      - name: Run unit tests
-        run: zig build test
+          # Create Kotlin Native Inline Module inside "native/"
+          cat << 'EOF' > native/MyNativeModule.kt
+          package native
 
-      - name: Run runtime test - Initialisation
-        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Initialisation
+          import expo.modules.kotlin.modules.Module
+          import expo.modules.kotlin.modules.ModuleDefinition
 
-      - name: Run runtime test - Panic
-        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Panic
+          class MyNativeModule : Module() {
+              override fun definition() = ModuleDefinition {
+                  Name("MyNativeModule")
+                  Function("getNativeMessage") {
+                      "Hello from Kotlin Native Inline Module!"
+                  }
+              }
+          }
+          EOF
 
-      - name: Run runtime test - Scheduler
-        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Scheduler
+          # Root App.js calling the inline module
+          cat << 'EOF' > App.js
+          import React from 'react';
+          import { StyleSheet, Text, View } from 'react-native';
+          import { requireNativeModule } from 'expo';
 
-      - name: Run runtime test - Memory
-        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Memory
-        
+          const MyNativeModule = requireNativeModule('MyNativeModule');
+
+          export default function App() {
+            return (
+              <View style={styles.container}>
+                <Text style={styles.text}>{MyNativeModule.getNativeMessage()}</Text>
+              </View>
+            );
+          }
+
+          const styles = StyleSheet.create({
+            container: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+            text: { fontSize: 18, fontWeight: 'bold', color: '#333' }
+          });
+          EOF
+
+      # 6. Generate Android Prebuild
+      - name: Run Expo Prebuild
+        run: |
+          cd my-expo-app
+          npx expo prebuild --platform android --clean
+
+      # 7. Make Gradlew Executable
+      - name: Grant Executable Permissions
+        run: chmod +x my-expo-app/android/gradlew
+
+      # 8. Build Debug APK
+      - name: Build Debug APK
+        run: |
+          cd my-expo-app/android
+          ./gradlew assembleDebug --no-daemon
+
+      # 9. Upload Artifact
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-inline-module-debug-apk
+          path: my-expo-app/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          
