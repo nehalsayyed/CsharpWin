@@ -1,10 +1,11 @@
-name: Build Tauri v2 Android APK
+name: Clone Tauri Template & Build Android APK
 
 on:
   workflow_dispatch:
 
 env:
   NDK_VERSION: "26.1.10909125"
+  CI: "true"
 
 jobs:
   build-android:
@@ -17,14 +18,14 @@ jobs:
         with:
           node-version: 22
 
-      # 2. Setup Java JDK (Required for Android Gradle build)
+      # 2. Setup Java JDK (Required for Android Gradle)
       - name: Setup Java JDK
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. Setup Android SDK & NDK
+      # 3. Setup Android SDK & Install NDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -34,36 +35,36 @@ jobs:
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
 
-      # 4. Setup Rust Toolchain and Android Targets
+      # 4. Setup Rust Toolchain & Android Cross-Compilation Targets
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
 
-      # 5. Initialize Tauri v2 App from Scratch
-      - name: Create Tauri v2 App
+      # 5. Clone the Tauri Template Repository
+      - name: Clone Repository
         run: |
-          npm create tauri-app@latest my-tauri-app -- --template react-ts --yes
-          cd my-tauri-app
+          git clone https://github.com/dannysmith/tauri-template.git app
+          cd app
           npm install
 
-      # 6. Initialize Tauri Android Native Project
-      - name: Initialize Tauri Android Project
+      # 6. Initialize Tauri Android Native Layer
+      - name: Initialize Tauri Android
         run: |
-          cd my-tauri-app
+          cd app
           npx tauri android init --target aarch64
 
-      # 7. Build Android Debug APK
+      # 7. Build Debug APK
       - name: Build Android APK
         run: |
-          cd my-tauri-app
+          cd app
           npx tauri android build --apk --target aarch64
 
       # 8. Upload Artifact
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-android-apk
-          path: my-tauri-app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+          name: tauri-template-android-apk
+          path: app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
           retention-days: 7
           
