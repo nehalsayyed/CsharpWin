@@ -8,47 +8,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Set up Node.js (Upgraded to setup-node@v4 with Node 22 LTS / compatible runtime)
+      # 1. Set up Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 2. Set up Java JDK (Upgraded to setup-java@v5)
+      # 2. Set up Java JDK
       - name: Setup Java JDK
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. Initialize a brand new Lynx JS project non-interactively
-      - name: Initialize Lynx JS Project
+      # 3. Set up Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 4. Initialize Lynx JS Project and Build JS Assets
+      - name: Create Lynx JS Project & Build Bundles
         run: |
           npm create rspeedy@latest my-lynx-app -- --template react --yes
           cd my-lynx-app
           npm install
-
-      # 4. Build Lynx JS Assets
-      - name: Build Lynx JS Assets
-        run: |
-          cd my-lynx-app
           npm run build
 
-      # 5. Make Gradlew executable
-      - name: Make Gradlew Executable
-        run: chmod +x my-lynx-app/android/gradlew
+      # 5. Clone Lynx Android Explorer / Host Template
+      - name: Setup Lynx Android Host Project
+        run: |
+          git clone --depth 1 https://github.com/lynx-family/lynx-android-template.git android-host || git clone --depth 1 https://github.com/lynx-family/lynx.git android-host
+          
+          # Copy compiled JS bundles to Android assets folder
+          mkdir -p android-host/app/src/main/assets/
+          cp -r my-lynx-app/dist/* android-host/app/src/main/assets/
 
-      # 6. Build Android Debug APK
+      # 6. Make Gradlew Executable
+      - name: Make Gradlew Executable
+        run: chmod +x android-host/gradlew
+
+      # 7. Build Android Debug APK
       - name: Build Android APK
         run: |
-          cd my-lynx-app/android
+          cd android-host
           ./gradlew assembleDebug --no-daemon
 
-      # 7. Upload the compiled APK as an artifact
+      # 8. Upload the compiled APK as an artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: lynx-debug-apk
-          path: my-lynx-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: android-host/app/build/outputs/apk/debug/*.apk
           retention-days: 7
           
