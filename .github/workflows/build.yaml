@@ -49,8 +49,8 @@ jobs:
         run: |
           cd my-ionic-app
 
-          # Create postcss.config.js manually without npx CLI calls
-          cat << 'EOF' > postcss.config.js
+          # Create postcss.config.cjs
+          cat << 'EOF' > postcss.config.cjs
           module.exports = {
             plugins: {
               '@tailwindcss/postcss': {},
