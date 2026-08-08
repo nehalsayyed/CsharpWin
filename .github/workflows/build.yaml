@@ -8,15 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Set up Node.js
+      # 1. Set up Node.js (Upgraded to setup-node@v4 with Node 22 LTS / compatible runtime)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # 2. Set up Java JDK required for Android Gradle
+      # 2. Set up Java JDK (Upgraded to setup-java@v5)
       - name: Setup Java JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -24,7 +24,7 @@ jobs:
       # 3. Initialize a brand new Lynx JS project non-interactively
       - name: Initialize Lynx JS Project
         run: |
-          npm create lynx@latest my-lynx-app -- --template default
+          npm create rspeedy@latest my-lynx-app -- --template react --yes
           cd my-lynx-app
           npm install
 
