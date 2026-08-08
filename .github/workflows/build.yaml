@@ -1,62 +1,45 @@
-name: Init Lynx JS App & Build APK
+name: CI
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-android:
+  test:
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Set up Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 2. Set up Java JDK
-      - name: Setup Java JDK
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # 3. Set up Android SDK
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      # 4. Initialize Lynx JS Project and Build JS Assets
-      - name: Create Lynx JS Project & Build Bundles
+      - name: Download Zig
         run: |
-          npm create rspeedy@latest my-lynx-app -- --template react --yes
-          cd my-lynx-app
-          npm install
-          npm run build
+          wget https://ziglang.org/download/0.9.1/zig-linux-x86_64-0.9.1.tar.xz
+          tar -xvf zig-linux-x86_64-0.9.1.tar.xz
+          echo "$PWD/zig-linux-x86_64-0.9.1" >> $GITHUB_PATH
 
-      # 5. Clone Lynx Android Explorer / Host Template
-      - name: Setup Lynx Android Host Project
+      - name: Install QEMU & Tools
         run: |
-          git clone --depth 1 https://github.com/lynx-family/lynx-android-template.git android-host || git clone --depth 1 https://github.com/lynx-family/lynx.git android-host
-          
-          # Copy compiled JS bundles to Android assets folder
-          mkdir -p android-host/app/src/main/assets/
-          cp -r my-lynx-app/dist/* android-host/app/src/main/assets/
+          sudo apt-get update
+          sudo apt-get install -y qemu qemu-system mtools --fix-missing
 
-      # 6. Make Gradlew Executable
-      - name: Make Gradlew Executable
-        run: chmod +x android-host/gradlew
+      - name: Check formatting
+        run: zig fmt --check src
 
-      # 7. Build Android Debug APK
-      - name: Build Android APK
-        run: |
-          cd android-host
-          ./gradlew assembleDebug --no-daemon
+      - name: Build kernel
+        run: zig build
 
-      # 8. Upload the compiled APK as an artifact
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lynx-debug-apk
-          path: android-host/app/build/outputs/apk/debug/*.apk
-          retention-days: 7
-          
+      - name: Run unit tests
+        run: zig build test
+
+      - name: Run runtime test - Initialisation
+        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Initialisation
+
+      - name: Run runtime test - Panic
+        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Panic
+
+      - name: Run runtime test - Scheduler
+        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Scheduler
+
+      - name: Run runtime test - Memory
+        run: zig build rt-test -Ddisable-display -Dnographic -Dtest-mode=Memory
