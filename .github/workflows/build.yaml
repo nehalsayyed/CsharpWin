@@ -18,11 +18,11 @@ jobs:
         with:
           node-version: 22
 
-      # 2. Setup Java JDK for Android Compilation
+      # 2. Setup Java JDK for Android Compilation (Updated to Java 21)
       - name: Setup Java JDK
         uses: actions/setup-java@v5
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       # 3. Setup Android SDK
