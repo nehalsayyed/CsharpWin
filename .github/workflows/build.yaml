@@ -37,37 +37,32 @@ jobs:
           cd my-ionic-app
           npm install
 
-      # 5. Install Tailwind CSS and Icon Library (lucide-react)
+      # 5. Install Tailwind CSS & Icon Library
       - name: Install Tailwind CSS & Icons
         run: |
           cd my-ionic-app
-          npm install -D tailwindcss postcss autoprefixer
+          npm install -D tailwindcss postcss autoprefixer @tailwindcss/postcss
           npm install lucide-react
-          npx tailwindcss init -p
 
-      # 6. Configure Tailwind & Add Native Feel Global Styles
-      - name: Apply Native Mobile Styles & Configure Tailwind
+      # 6. Configure PostCSS & Apply Native Mobile Styles
+      - name: Configure Tailwind & Native Styles
         run: |
           cd my-ionic-app
 
-          # Configure tailwind.config.js
-          cat << 'EOF' > tailwind.config.js
-          /** @type {import('tailwindcss').Config} */
+          # Create postcss.config.js manually without npx CLI calls
+          cat << 'EOF' > postcss.config.js
           module.exports = {
-            content: ["./src/**/*.{js,jsx,ts,tsx}"],
-            theme: {
-              extend: {},
+            plugins: {
+              '@tailwindcss/postcss': {},
+              autoprefixer: {},
             },
-            plugins: [],
           }
           EOF
 
-          # Inject Tailwind Directives & Native Feel Reset Rules in src/theme/variables.css
+          # Inject Tailwind import & Native Reset Rules into src/theme/variables.css
           cat << 'EOF' >> src/theme/variables.css
 
-          @tailwind base;
-          @tailwind components;
-          @tailwind utilities;
+          @import "tailwindcss";
 
           /* Native App Experience Lock - Disables Web Text Selection & Callouts */
           * {
@@ -79,7 +74,7 @@ jobs:
             -webkit-tap-highlight-color: transparent !important;
           }
 
-          /* Re-enable text selection only for text input fields */
+          /* Re-enable text selection for input elements */
           input, textarea, [contenteditable="true"] {
             -webkit-user-select: text !important;
             -moz-user-select: text !important;
@@ -88,8 +83,8 @@ jobs:
           }
           EOF
 
-      # 7. Add React Demo Component using Tailwind & Lucide Icons
-      - name: Update App Component with Icons & Tailwind
+      # 7. Add React Component using Tailwind & Lucide Icons
+      - name: Update Home Component
         run: |
           cd my-ionic-app
 
