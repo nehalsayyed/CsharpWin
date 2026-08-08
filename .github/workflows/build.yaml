@@ -1,35 +1,35 @@
-name: Build and Test Rust WASM
+name: Get System Information
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch: # Allows you to trigger this manually from the Actions tab
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  gather-specs:
+    # Uses GitHub's free-tier Ubuntu runner 
+    runs-on: ubuntu-latest 
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
+      - name: Fetch CPU Information
+        run: |
+          echo "=== CPU Info ==="
+          lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)|Thread\(s\) per core|CPU\(s\):"
 
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Fetch Memory Information
+        run: |
+          echo "=== Memory Info ==="
+          free -h
 
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Fetch Operating System & Kernel Info
+        run: |
+          echo "=== OS & Kernel Info ==="
+          uname -a
+          cat /etc/os-release | grep -E "PRETTY_NAME|VERSION="
 
-      - name: Run WASM tests (Node.js environment)
-        run: wasm-pack test --node
-
-      - name: Build WebAssembly package (web target)
-        run: wasm-pack build --target web --release
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-pkg
-          path: pkg/
+      - name: Fetch Disk Space Information
+        run: |
+          echo "=== Disk Info ==="
+          df -h /
           
