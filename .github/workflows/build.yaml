@@ -1,35 +1,54 @@
-name: Get System Information
+name: Init Lynx JS App & Build APK
 
 on:
-  workflow_dispatch: # Allows you to trigger this manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
-  gather-specs:
-    # Uses GitHub's free-tier Ubuntu runner 
-    runs-on: ubuntu-latest 
+  build-android:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # 1. Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Fetch CPU Information
-        run: |
-          echo "=== CPU Info ==="
-          lscpu | grep -E "Model name|Core\(s\) per socket|Socket\(s\)|Thread\(s\) per core|CPU\(s\):"
+      # 2. Set up Java JDK required for Android Gradle
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Fetch Memory Information
+      # 3. Initialize a brand new Lynx JS project non-interactively
+      - name: Initialize Lynx JS Project
         run: |
-          echo "=== Memory Info ==="
-          free -h
+          npm create lynx@latest my-lynx-app -- --template default
+          cd my-lynx-app
+          npm install
 
-      - name: Fetch Operating System & Kernel Info
+      # 4. Build Lynx JS Assets
+      - name: Build Lynx JS Assets
         run: |
-          echo "=== OS & Kernel Info ==="
-          uname -a
-          cat /etc/os-release | grep -E "PRETTY_NAME|VERSION="
+          cd my-lynx-app
+          npm run build
 
-      - name: Fetch Disk Space Information
+      # 5. Make Gradlew executable
+      - name: Make Gradlew Executable
+        run: chmod +x my-lynx-app/android/gradlew
+
+      # 6. Build Android Debug APK
+      - name: Build Android APK
         run: |
-          echo "=== Disk Info ==="
-          df -h /
+          cd my-lynx-app/android
+          ./gradlew assembleDebug --no-daemon
+
+      # 7. Upload the compiled APK as an artifact
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lynx-debug-apk
+          path: my-lynx-app/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
           
