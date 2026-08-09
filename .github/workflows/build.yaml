@@ -1,52 +1,70 @@
-name: Build Custom JRE for Termux
+name: Build GraalVM Native Android/Linux Binary
 
 on:
   workflow_dispatch: # Allows manual trigger from GitHub UI
+  
 
 jobs:
-  build-termux-jre:
-    runs-on: ubuntu-latest
+  build-native-binary:
+    # Use native ARM64 runner for fast, native aarch64 compilation
+    runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up JDK on Runner
-        uses: actions/setup-java@v4
+      - name: Set up GraalVM JDK
+        uses: graalvm/setup-graalvm@v1
         with:
-          distribution: 'temurin'
           java-version: '21'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
 
-      # Download an Android/Linux-aarch64 JDK build to extract modules from
-      - name: Download Termux-compatible OpenJDK
+      # Step 1: Initialize a new example Java application if one doesn't exist
+      - name: Init Example Java Project
         run: |
-          mkdir -p target-jdk
-          # Using Eclipse Temurin / Adoptium Linux AArch64 (ARM64) binary
-          curl -L -o openjdk.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.2%2B13/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.2_13.tar.gz
-          tar -xzf openjdk.tar.gz -C target-jdk --strip-components=1
+          mkdir -p src/com/example
+          cat << 'EOF' > src/com/example/Main.java
+          package com.example;
 
-      - name: Build Custom Lightweight JRE with jlink
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("==========================================");
+                  System.out.println(" Hello from GraalVM Native Binary on Termux!");
+                  System.out.println(" Architecture: " + System.getProperty("os.arch"));
+                  System.out.println(" Java Version: " + System.getProperty("java.version"));
+                  System.out.println("==========================================");
+              }
+          }
+          EOF
+
+      # Step 2: Compile Java source files to bytecode
+      - name: Compile Java Code
         run: |
-          # Define only the modules your application/script actually needs
-          MODULES="java.base,java.logging,java.sql,java.net.http"
-          
-          # Run jlink using host JDK targeting the downloaded AArch64 modules
-          $JAVA_HOME/bin/jlink \
-            --module-path target-jdk/jmods \
-            --add-modules $MODULES \
-            --strip-debug \
-            --no-man-pages \
-            --no-header-files \
-            --compress=zip-9 \
-            --output custom-jre-aarch64
+          mkdir -p bin
+          javac -d bin src/com/example/Main.java
 
-      - name: Package JRE Tarball
+      # Step 3: Ahead-Of-Time (AOT) compile bytecode into a native binary using GraalVM
+      - name: Build Standalone Native Executable
         run: |
-          tar -czvf termux-jre-aarch64.tar.gz custom-jre-aarch64/
+          native-image \
+            -cp bin \
+            --no-fallback \
+            -H:Name=app-aarch64 \
+            com.example.Main
 
-      - name: Upload Artifact
+      # Step 4: Verify and make executable
+      - name: Test Native Executable Execution & Check Binary Info
+        run: |
+          chmod +x app-aarch64
+          ./app-aarch64
+          file app-aarch64
+
+      # Step 5: Upload the compiled binary as a workflow artifact
+      - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: termux-jre-aarch64
-          path: termux-jre-aarch64.tar.gz
+          name: termux-app-aarch64
+          path: app-aarch64
           
