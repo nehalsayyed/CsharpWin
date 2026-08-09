@@ -1,163 +1,102 @@
-name: Build Ionic Capacitor Android APK
+name: Clone Space Impact & Build APK (API 33 Ready)
 
 on:
   workflow_dispatch:
 
-env:
-  CI: "true"
-
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Setup Node.js Environment
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # 2. Setup Java JDK for Android Compilation (Updated to Java 21)
+      # 1. Setup Java JDK 17
       - name: Setup Java JDK
         uses: actions/setup-java@v5
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      # 3. Setup Android SDK
+      # 2. Setup Android SDK 33
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          build-tools: 33.0.2
 
-      # 4. Initialize Ionic React App
-      - name: Create Ionic React App
+      # 3. Clone Repository
+      - name: Clone Space Impact Repository
         run: |
-          npm install -g @ionic/cli
-          ionic start my-ionic-app blank --type=react --capacitor --no-git --no-deps
-          cd my-ionic-app
-          npm install
+          git clone https://github.com/Shefali-Upadhyaya/space-impact-game.git app
+          cd app
 
-      # 5. Install Tailwind CSS & Icon Library
-      - name: Install Tailwind CSS & Icons
+      # 4. Patch build.gradle for API 33 & Modern Gradle Syntax
+      - name: Update Gradle Configuration for API 33
         run: |
-          cd my-ionic-app
-          npm install -D tailwindcss postcss autoprefixer @tailwindcss/postcss
-          npm install lucide-react
+          cd app
 
-      # 6. Configure PostCSS & Apply Native Mobile Styles
-      - name: Configure Tailwind & Native Styles
+          # Update app/build.gradle properties
+          node -e '
+            const fs = require("fs");
+            let file = "app/build.gradle";
+            if (!fs.existsSync(file)) file = "build.gradle";
+
+            let content = fs.readFileSync(file, "utf8");
+
+            // Update SDK Targets to 33
+            content = content.replace(/compileSdkVersion\s+\d+/, "compileSdk 33");
+            content = content.replace(/targetSdkVersion\s+\d+/, "targetSdkVersion 33");
+            content = content.replace(/buildToolsVersion\s+["\'][^"\']+["\']/, "buildToolsVersion \"33.0.2\"");
+
+            // Replace deprecated "compile" dependency configuration with "implementation"
+            content = content.replace(/compile\s+fileTree/g, "implementation fileTree");
+            content = content.replace(/compile\s+["\']/g, "implementation \"");
+
+            fs.writeFileSync(file, content);
+          '
+
+      # 5. Fix AndroidManifest.xml for Android 12/13 (API 31+) Requirements
+      - name: Fix Activity Export Attribute
         run: |
-          cd my-ionic-app
+          cd app
+          # Android 12+ requires explicit android:exported="true" on intent-filter activities
+          node -e '
+            const fs = require("fs");
+            const glob = require("glob");
+            const files = fs.readdirSync("app/src/main", { recursive: true })
+                           .filter(f => f.endsWith("AndroidManifest.xml"))
+                           .map(f => "app/src/main/" + f);
 
-          # Create postcss.config.cjs
-          cat << 'EOF' > postcss.config.cjs
-          module.exports = {
-            plugins: {
-              '@tailwindcss/postcss': {},
-              autoprefixer: {},
-            },
-          }
-          EOF
+            files.forEach(file => {
+              let content = fs.readFileSync(file, "utf8");
+              if (!content.includes("android:exported")) {
+                content = content.replace(/<activity/g, "<activity android:exported=\"true\"");
+                fs.writeFileSync(file, content);
+              }
+            });
+          '
 
-          # Inject Tailwind import & Native Reset Rules into src/theme/variables.css
-          cat << 'EOF' >> src/theme/variables.css
-
-          @import "tailwindcss";
-
-          /* Native App Experience Lock - Disables Web Text Selection & Callouts */
-          * {
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-            user-select: none !important;
-            -webkit-touch-callout: none !important;
-            -webkit-tap-highlight-color: transparent !important;
-          }
-
-          /* Re-enable text selection for input elements */
-          input, textarea, [contenteditable="true"] {
-            -webkit-user-select: text !important;
-            -moz-user-select: text !important;
-            -ms-user-select: text !important;
-            user-select: text !important;
-          }
-          EOF
-
-      # 7. Add React Component using Tailwind & Lucide Icons
-      - name: Update Home Component
-        run: |
-          cd my-ionic-app
-
-          cat << 'EOF' > src/pages/Home.tsx
-          import React from 'react';
-          import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/react';
-          import { Smartphone, Sparkles, ShieldCheck } from 'lucide-react';
-
-          const Home: React.FC = () => {
-            return (
-              <IonPage>
-                <IonHeader>
-                  <IonToolbar>
-                    <IonTitle>Native Ionic App</IonTitle>
-                  </IonToolbar>
-                </IonHeader>
-                <IonContent className="ion-padding">
-                  <div className="flex flex-col items-center justify-center min-h-[80vh] text-center space-y-6">
-                    <div className="p-4 bg-blue-500/10 rounded-full text-blue-500">
-                      <Smartphone className="w-16 h-16" />
-                    </div>
-                    
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-                      Tailwind & Native Feel
-                    </h1>
-
-                    <p className="text-slate-500 max-w-xs text-sm">
-                      Text selection, blue highlight taps, and callout menus are disabled for a true mobile app experience.
-                    </p>
-
-                    <div className="flex space-x-4 pt-4">
-                      <div className="flex items-center space-x-2 bg-emerald-500/10 text-emerald-600 px-3 py-1.5 rounded-lg text-xs font-semibold">
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>Selection Locked</span>
-                      </div>
-                      <div className="flex items-center space-x-2 bg-purple-500/10 text-purple-600 px-3 py-1.5 rounded-lg text-xs font-semibold">
-                        <Sparkles className="w-4 h-4" />
-                        <span>Lucide Icons</span>
-                      </div>
-                    </div>
-                  </div>
-                </IonContent>
-              </IonPage>
-            );
-          };
-
-          export default Home;
-          EOF
-
-      # 8. Build Web Assets & Initialize Android Platform
-      - name: Build Web App & Sync Capacitor Android
-        run: |
-          cd my-ionic-app
-          npm run build
-          npm install @capacitor/android
-          npx cap add android
-          npx cap sync android
-
-      # 9. Make Gradle Executable
+      # 6. Make Gradlew Executable & Ensure Gradle Wrapper
       - name: Grant Executable Permissions
-        run: chmod +x my-ionic-app/android/gradlew
+        run: |
+          cd app
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+          fi
 
-      # 10. Build Android Debug APK
+      # 7. Build Debug APK
       - name: Build Android Debug APK
         run: |
-          cd my-ionic-app/android
-          ./gradlew assembleDebug --no-daemon
+          cd app
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --no-daemon
+          else
+            gradle assembleDebug
+          fi
 
-      # 11. Upload Output APK Artifact
-      - name: Upload APK
+      # 8. Upload Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ionic-capacitor-native-apk
-          path: my-ionic-app/android/app/build/outputs/apk/debug/*.apk
+          name: space-impact-api33-debug-apk
+          path: app/**/build/outputs/apk/debug/*.apk
           retention-days: 7
           
