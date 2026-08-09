@@ -1,102 +1,52 @@
-name: Clone Space Impact & Build APK (API 33 Ready)
+name: Build Custom JRE for Termux
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
-  build:
+  build-termux-jre:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Setup Java JDK 17
-      - name: Setup Java JDK
-        uses: actions/setup-java@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK on Runner
+        uses: actions/setup-java@v4
         with:
-          java-version: '17'
           distribution: 'temurin'
+          java-version: '21'
 
-      # 2. Setup Android SDK 33
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 33
-          build-tools: 33.0.2
-
-      # 3. Clone Repository
-      - name: Clone Space Impact Repository
+      # Download an Android/Linux-aarch64 JDK build to extract modules from
+      - name: Download Termux-compatible OpenJDK
         run: |
-          git clone https://github.com/Shefali-Upadhyaya/space-impact-game.git app
-          cd app
+          mkdir -p target-jdk
+          # Using Eclipse Temurin / Adoptium Linux AArch64 (ARM64) binary
+          curl -L -o openjdk.tar.gz https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.2%2B13/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.2_13.tar.gz
+          tar -xzf openjdk.tar.gz -C target-jdk --strip-components=1
 
-      # 4. Patch build.gradle for API 33 & Modern Gradle Syntax
-      - name: Update Gradle Configuration for API 33
+      - name: Build Custom Lightweight JRE with jlink
         run: |
-          cd app
+          # Define only the modules your application/script actually needs
+          MODULES="java.base,java.logging,java.sql,java.net.http"
+          
+          # Run jlink using host JDK targeting the downloaded AArch64 modules
+          $JAVA_HOME/bin/jlink \
+            --module-path target-jdk/jmods \
+            --add-modules $MODULES \
+            --strip-debug \
+            --no-man-pages \
+            --no-header-files \
+            --compress=zip-9 \
+            --output custom-jre-aarch64
 
-          # Update app/build.gradle properties
-          node -e '
-            const fs = require("fs");
-            let file = "app/build.gradle";
-            if (!fs.existsSync(file)) file = "build.gradle";
-
-            let content = fs.readFileSync(file, "utf8");
-
-            // Update SDK Targets to 33
-            content = content.replace(/compileSdkVersion\s+\d+/, "compileSdk 33");
-            content = content.replace(/targetSdkVersion\s+\d+/, "targetSdkVersion 33");
-            content = content.replace(/buildToolsVersion\s+["\'][^"\']+["\']/, "buildToolsVersion \"33.0.2\"");
-
-            // Replace deprecated "compile" dependency configuration with "implementation"
-            content = content.replace(/compile\s+fileTree/g, "implementation fileTree");
-            content = content.replace(/compile\s+["\']/g, "implementation \"");
-
-            fs.writeFileSync(file, content);
-          '
-
-      # 5. Fix AndroidManifest.xml for Android 12/13 (API 31+) Requirements
-      - name: Fix Activity Export Attribute
+      - name: Package JRE Tarball
         run: |
-          cd app
-          # Android 12+ requires explicit android:exported="true" on intent-filter activities
-          node -e '
-            const fs = require("fs");
-            const glob = require("glob");
-            const files = fs.readdirSync("app/src/main", { recursive: true })
-                           .filter(f => f.endsWith("AndroidManifest.xml"))
-                           .map(f => "app/src/main/" + f);
+          tar -czvf termux-jre-aarch64.tar.gz custom-jre-aarch64/
 
-            files.forEach(file => {
-              let content = fs.readFileSync(file, "utf8");
-              if (!content.includes("android:exported")) {
-                content = content.replace(/<activity/g, "<activity android:exported=\"true\"");
-                fs.writeFileSync(file, content);
-              }
-            });
-          '
-
-      # 6. Make Gradlew Executable & Ensure Gradle Wrapper
-      - name: Grant Executable Permissions
-        run: |
-          cd app
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-          fi
-
-      # 7. Build Debug APK
-      - name: Build Android Debug APK
-        run: |
-          cd app
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --no-daemon
-          else
-            gradle assembleDebug
-          fi
-
-      # 8. Upload Artifact
-      - name: Upload APK Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: space-impact-api33-debug-apk
-          path: app/**/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          name: termux-jre-aarch64
+          path: termux-jre-aarch64.tar.gz
           
