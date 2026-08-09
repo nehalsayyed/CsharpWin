@@ -1,12 +1,11 @@
 name: Build Fully Static GraalVM Native Binary for Termux
 
 on:
-  workflow_dispatch: # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
   
 
 jobs:
   build-static-binary:
-    # Use native ARM64 runner for fast aarch64 compilation
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -19,16 +18,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl musl-dev musl-tools
 
-      # Step 2: Set up GraalVM JDK with Musl support enabled
+      # Step 2: Set up GraalVM JDK with Musl support enabled (Fixed input name)
       - name: Set up GraalVM JDK
         uses: graalvm/setup-graalvm@v1
         with:
           java-version: '21'
           distribution: 'graalvm'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-musl-native-toolchain: 'true'
+          native-image-musl: 'true'
 
-      # Step 3: Create a sample Java application if src doesn't exist
+      # Step 3: Create sample Java application
       - name: Init Example Java Project
         run: |
           mkdir -p src/com/example
@@ -52,8 +51,10 @@ jobs:
           mkdir -p bin
           javac -d bin src/com/example/Main.java
 
-      # Step 5: Build fully static native binary with Musl
+      # Step 5: Build fully static native binary using musl-gcc
       - name: Build Fully Static Native Executable
+        env:
+          CC: musl-gcc
         run: |
           native-image \
             -cp bin \
@@ -63,13 +64,13 @@ jobs:
             -H:Name=app-aarch64 \
             com.example.Main
 
-      # Step 6: Verify the binary details
+      # Step 6: Verify binary type
       - name: Verify Binary Info
         run: |
           chmod +x app-aarch64
           file app-aarch64
 
-      # Step 7: Upload binary artifact
+      # Step 7: Upload artifact
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
