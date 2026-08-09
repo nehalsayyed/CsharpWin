@@ -1,79 +1,37 @@
-name: Build Fully Static GraalVM Native Binary for Termux
+name: Build hermes-dec ARM64 Executable
 
 on:
   workflow_dispatch:
-  
 
 jobs:
-  build-static-binary:
+  build-hermes-dec:
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Step 1: Install Musl C Library and development tools
-      - name: Install Musl Toolchain
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl musl-dev musl-tools
+          sudo apt-get install -y build-essential cmake git
 
-      # Step 2: Set up GraalVM JDK with Musl support enabled (Fixed input name)
-      - name: Set up GraalVM JDK
-        uses: graalvm/setup-graalvm@v1
-        with:
-          java-version: '21'
-          distribution: 'graalvm'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-musl: 'true'
-
-      # Step 3: Create sample Java application
-      - name: Init Example Java Project
+      - name: Build hermes-dec for ARM64
         run: |
-          mkdir -p src/com/example
-          cat << 'EOF' > src/com/example/Main.java
-          package com.example;
+          git clone --recursive https://github.com/P1sec/hermes-dec.git
+          cd hermes-dec
+          mkdir build && cd build
+          cmake ..
+          make -j$(nproc)
 
-          public class Main {
-              public static void main(String[] args) {
-                  System.out.println("==========================================");
-                  System.out.println(" Hello from Static GraalVM on Termux!     ");
-                  System.out.println(" Architecture: " + System.getProperty("os.arch"));
-                  System.out.println(" Java Version: " + System.getProperty("java.version"));
-                  System.out.println("==========================================");
-              }
-          }
-          EOF
-
-      # Step 4: Compile Java source code to bytecode
-      - name: Compile Java Code
+      - name: Verify Binary
         run: |
-          mkdir -p bin
-          javac -d bin src/com/example/Main.java
+          chmod +x hermes-dec/build/hermes-dec
+          file hermes-dec/build/hermes-dec
 
-      # Step 5: Build fully static native binary using musl-gcc
-      - name: Build Fully Static Native Executable
-        env:
-          CC: musl-gcc
-        run: |
-          native-image \
-            -cp bin \
-            --no-fallback \
-            --static \
-            --libc=musl \
-            -H:Name=app-aarch64 \
-            com.example.Main
-
-      # Step 6: Verify binary type
-      - name: Verify Binary Info
-        run: |
-          chmod +x app-aarch64
-          file app-aarch64
-
-      # Step 7: Upload artifact
-      - name: Upload Binary Artifact
+      - name: Upload Single Binary Executable
         uses: actions/upload-artifact@v4
         with:
-          name: termux-static-app-aarch64
-          path: app-aarch64
+          name: hermes-dec
+          path: hermes-dec/build/hermes-dec
           
