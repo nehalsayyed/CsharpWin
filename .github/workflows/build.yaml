@@ -1,3 +1,4 @@
+          
 name: Build hermes-dec ARM64 Executable
 
 on:
@@ -11,27 +12,44 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake git
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Build hermes-dec for ARM64
+      - name: Install Dependencies & PyInstaller
         run: |
-          git clone --recursive https://github.com/P1sec/hermes-dec.git
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Clone hermes-dec Repository
+        run: |
+          git clone https://github.com/P1sec/hermes-dec.git
           cd hermes-dec
-          mkdir build && cd build
-          cmake ..
-          make -j$(nproc)
+          pip install -e .
 
-      - name: Verify Binary
+      - name: Build Standalone Single Binary with PyInstaller
         run: |
-          chmod +x hermes-dec/build/hermes-dec
-          file hermes-dec/build/hermes-dec
+          cd hermes-dec
+          # Locate the main python entrypoint or module for hbc-decompiler
+          # Compiles Python source + standard library into a single executable file
+          pyinstaller --onefile \
+            --name hermes-dec-decompiler \
+            --collect-all hermes_dec \
+            src/hermes_dec/hbc_decompiler.py || \
+          pyinstaller --onefile \
+            --name hermes-dec-decompiler \
+            --collect-all hermes_dec \
+            hbc-decompiler
+
+      - name: Verify Single Executable
+        run: |
+          chmod +x hermes-dec/dist/hermes-dec-decompiler
+          file hermes-dec/dist/hermes-dec-decompiler
 
       - name: Upload Single Binary Executable
         uses: actions/upload-artifact@v4
         with:
-          name: hermes-dec
-          path: hermes-dec/build/hermes-dec
+          name: hermes-dec-decompiler
+          path: hermes-dec/dist/hermes-dec-decompiler
           
