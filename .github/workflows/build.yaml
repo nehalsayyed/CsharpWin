@@ -1,27 +1,34 @@
-name: Build GraalVM Native Android/Linux Binary
+name: Build Fully Static GraalVM Native Binary for Termux
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch: # Manual trigger from GitHub Actions UI
   
 
 jobs:
-  build-native-binary:
-    # Use native ARM64 runner for fast, native aarch64 compilation
+  build-static-binary:
+    # Use native ARM64 runner for fast aarch64 compilation
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Step 1: Install Musl C Library and development tools
+      - name: Install Musl Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl musl-dev musl-tools
+
+      # Step 2: Set up GraalVM JDK with Musl support enabled
       - name: Set up GraalVM JDK
         uses: graalvm/setup-graalvm@v1
         with:
           java-version: '21'
           distribution: 'graalvm'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          native-image-job-reports: 'true'
+          native-image-musl-native-toolchain: 'true'
 
-      # Step 1: Initialize a new example Java application if one doesn't exist
+      # Step 3: Create a sample Java application if src doesn't exist
       - name: Init Example Java Project
         run: |
           mkdir -p src/com/example
@@ -31,7 +38,7 @@ jobs:
           public class Main {
               public static void main(String[] args) {
                   System.out.println("==========================================");
-                  System.out.println(" Hello from GraalVM Native Binary on Termux!");
+                  System.out.println(" Hello from Static GraalVM on Termux!     ");
                   System.out.println(" Architecture: " + System.getProperty("os.arch"));
                   System.out.println(" Java Version: " + System.getProperty("java.version"));
                   System.out.println("==========================================");
@@ -39,32 +46,33 @@ jobs:
           }
           EOF
 
-      # Step 2: Compile Java source files to bytecode
+      # Step 4: Compile Java source code to bytecode
       - name: Compile Java Code
         run: |
           mkdir -p bin
           javac -d bin src/com/example/Main.java
 
-      # Step 3: Ahead-Of-Time (AOT) compile bytecode into a native binary using GraalVM
-      - name: Build Standalone Native Executable
+      # Step 5: Build fully static native binary with Musl
+      - name: Build Fully Static Native Executable
         run: |
           native-image \
             -cp bin \
             --no-fallback \
+            --static \
+            --libc=musl \
             -H:Name=app-aarch64 \
             com.example.Main
 
-      # Step 4: Verify and make executable
-      - name: Test Native Executable Execution & Check Binary Info
+      # Step 6: Verify the binary details
+      - name: Verify Binary Info
         run: |
           chmod +x app-aarch64
-          ./app-aarch64
           file app-aarch64
 
-      # Step 5: Upload the compiled binary as a workflow artifact
+      # Step 7: Upload binary artifact
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: termux-app-aarch64
+          name: termux-static-app-aarch64
           path: app-aarch64
           
