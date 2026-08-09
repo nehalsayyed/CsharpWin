@@ -1,55 +1,33 @@
-          
-name: Build hermes-dec ARM64 Executable
+name: Build hermes-decomp ARM64 Executable
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
-  build-hermes-dec:
+  build-arm64-binary:
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Dependencies & PyInstaller
+      - name: Build hermes-decomp Binary
         run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
+          git clone https://github.com/SymbioticSec/hermes-decomp.git
+          cd hermes-decomp
+          cargo build --release --bin hermes-decomp
 
-      - name: Clone hermes-dec Repository
+      - name: Verify Binary Info
         run: |
-          git clone https://github.com/P1sec/hermes-dec.git
-          cd hermes-dec
-          pip install -e .
-
-      - name: Build Standalone Single Binary with PyInstaller
-        run: |
-          cd hermes-dec
-          # Locate the main python entrypoint or module for hbc-decompiler
-          # Compiles Python source + standard library into a single executable file
-          pyinstaller --onefile \
-            --name hermes-dec-decompiler \
-            --collect-all hermes_dec \
-            src/hermes_dec/hbc_decompiler.py || \
-          pyinstaller --onefile \
-            --name hermes-dec-decompiler \
-            --collect-all hermes_dec \
-            hbc-decompiler
-
-      - name: Verify Single Executable
-        run: |
-          chmod +x hermes-dec/dist/hermes-dec-decompiler
-          file hermes-dec/dist/hermes-dec-decompiler
+          chmod +x hermes-decomp/target/release/hermes-decomp
+          file hermes-decomp/target/release/hermes-decomp
 
       - name: Upload Single Binary Executable
         uses: actions/upload-artifact@v4
         with:
-          name: hermes-dec-decompiler
-          path: hermes-dec/dist/hermes-dec-decompiler
+          name: hermes-decomp-arm64
+          path: hermes-decomp/target/release/hermes-decomp
           
