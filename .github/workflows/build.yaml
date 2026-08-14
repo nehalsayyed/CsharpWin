@@ -13,25 +13,20 @@ jobs:
         run: |
           git clone --recursive https://github.com/Yalantis/Side-Menu.Android.git .
 
-      # 2. Set up JDK 8 (Required for older 6+ year Gradle builds)
-      - name: Set up JDK 8
+      # 2. Set up JDK 17 (Required by modern Ubuntu runners & SDK tools)
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '8'
+          distribution: 'temurin'
+          java-version: '17'
 
-      # 3. Accept Android SDK Licenses
-      - name: Accept Android Licenses
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      # 4. Build the AAR file using legacy Gradle wrapper
+      # 3. Build the AAR file
       - name: Build Library AAR
         run: |
           chmod +x gradlew
           ./gradlew :library:assembleRelease --stacktrace
 
-      # 5. Upload the compiled .aar artifact
+      # 4. Upload the compiled .aar artifact
       - name: Upload AAR Artifact
         uses: actions/upload-artifact@v4
         with:
