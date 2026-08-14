@@ -30,12 +30,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 5. Generate package.json & app.json on the fly
-      - name: Create Project Configuration
+      # 5. Create valid project configuration
+      - name: Create Project Files
         run: |
           cat << 'EOF' > package.json
           {
-            "name": "my-device-app",
+            "name": "csharpwin",
             "version": "1.0.0",
             "main": "index.js",
             "scripts": {
@@ -55,18 +55,30 @@ jobs:
           cat << 'EOF' > app.json
           {
             "expo": {
-              "name": "DeviceApp",
-              "slug": "device-app",
+              "name": "CsharpWin",
+              "slug": "csharpwin",
               "version": "1.0.0",
+              "orientation": "portrait",
+              "userInterfaceStyle": "light",
+              "newArchEnabled": false,
               "android": {
-                "package": "com.myapp.deviceinfo"
+                "package": "com.csharpwin.app"
               }
             }
           }
           EOF
 
-      # 6. Write your exact App.js code
-      - name: Create App.js
+          cat << 'EOF' > react-native.config.js
+          module.exports = {
+            project: {
+              android: {},
+              ios: {},
+            },
+          };
+          EOF
+
+      # 6. Create App.js and Entry Index
+      - name: Create Source Code
         run: |
           cat << 'EOF' > App.js
           import { Text, View } from 'react-native';
@@ -83,19 +95,26 @@ jobs:
           }
           EOF
 
+          cat << 'EOF' > index.js
+          import { registerRootComponent } from 'expo';
+          import App from './App';
+
+          registerRootComponent(App);
+          EOF
+
       # 7. Install dependencies
       - name: Install NPM Packages
         run: npm install
 
-      # 8. Generate Android native files
+      # 8. Generate Android native directory
       - name: Expo Prebuild
-        run: npx expo prebuild --platform android
+        run: npx expo prebuild --platform android --clean
 
       # 9. Grant executable permission to Gradle
       - name: Make Gradle Executable
         run: chmod +x android/gradlew
 
-      # 10. Build Debug APK on the runner
+      # 10. Build Debug APK via Gradle
       - name: Build APK via Gradle
         run: |
           cd android
