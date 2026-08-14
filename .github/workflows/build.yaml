@@ -1,33 +1,111 @@
-name: Build hermes-decomp ARM64 Executable
+name: Build Android APK
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
-  build-arm64-binary:
-    runs-on: ubuntu-24.04-arm
+  build-apk:
+    name: Generate App & Build APK
+    runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Build hermes-decomp Binary
+      # 3. Setup Java JDK
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      # 4. Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 5. Generate package.json & app.json on the fly
+      - name: Create Project Configuration
         run: |
-          git clone https://github.com/SymbioticSec/hermes-decomp.git
-          cd hermes-decomp
-          cargo build --release --bin hermes-decomp
+          cat << 'EOF' > package.json
+          {
+            "name": "my-device-app",
+            "version": "1.0.0",
+            "main": "index.js",
+            "scripts": {
+              "start": "expo start",
+              "android": "expo start --android"
+            },
+            "dependencies": {
+              "expo": "~51.0.0",
+              "expo-device": "~6.0.2",
+              "expo-status-bar": "~1.12.1",
+              "react": "18.2.0",
+              "react-native": "0.74.5"
+            }
+          }
+          EOF
 
-      - name: Verify Binary Info
+          cat << 'EOF' > app.json
+          {
+            "expo": {
+              "name": "DeviceApp",
+              "slug": "device-app",
+              "version": "1.0.0",
+              "android": {
+                "package": "com.myapp.deviceinfo"
+              }
+            }
+          }
+          EOF
+
+      # 6. Write your exact App.js code
+      - name: Create App.js
         run: |
-          chmod +x hermes-decomp/target/release/hermes-decomp
-          file hermes-decomp/target/release/hermes-decomp
+          cat << 'EOF' > App.js
+          import { Text, View } from 'react-native';
+          import * as Device from 'expo-device';
 
-      - name: Upload Single Binary Executable
+          export default function App() {
+            return (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Text>
+                  {Device.manufacturer}: {Device.modelName}
+                </Text>
+              </View>
+            );
+          }
+          EOF
+
+      # 7. Install dependencies
+      - name: Install NPM Packages
+        run: npm install
+
+      # 8. Generate Android native files
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform android
+
+      # 9. Grant executable permission to Gradle
+      - name: Make Gradle Executable
+        run: chmod +x android/gradlew
+
+      # 10. Build Debug APK on the runner
+      - name: Build APK via Gradle
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      # 11. Upload APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hermes-decomp-arm64
-          path: hermes-decomp/target/release/hermes-decomp
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
           
