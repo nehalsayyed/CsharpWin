@@ -1,4 +1,4 @@
-name: Build SFML for Termux (Android aarch64)
+name: Build SFML 3 for Termux (Android aarch64)
 
 on:
   workflow_dispatch:
@@ -19,12 +19,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build git zip
 
-      # 3. Clone SFML Repository
+      # 3. Clone SFML 3
       - name: Clone SFML
         run: |
-          git clone --depth 1 --branch 2.6.1 https://github.com/SFML/SFML.git sfml-src
+          git clone --depth 1 https://github.com/SFML/SFML.git sfml-src
 
-      # 4. Configure CMake using built-in Android NDK
+      # 4. Configure CMake
       - name: Configure CMake
         run: |
           mkdir sfml-build
@@ -54,7 +54,7 @@ jobs:
           # Copy compiled shared libraries (.so files)
           cp sfml-build/lib/*.so sfml-termux/lib/
           
-          # Copy STL libc++_shared.so from the built-in NDK
+          # Copy STL libc++_shared.so from NDK
           cp $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so sfml-termux/lib/
           
           # Copy C++ Include Headers
@@ -64,7 +64,7 @@ jobs:
           cd sfml-termux
           zip -r ../sfml-android-aarch64-termux.zip .
 
-      # 7. Upload Artifact to GitHub
+      # 7. Upload Artifact
       - name: Upload SFML Package Artifact
         uses: actions/upload-artifact@v4
         with:
