@@ -10,17 +10,9 @@ jobs:
        
        
     - name: Set up Java
-      uses: actions/setup-java@v5
-      with:
-        distribution: 'zulu'
-        java-version: '21' # Replace with your required Java version (e.g., 8, 11, 17, 21)
-    
+      uses: fabasoad/pascal-action@v1
+      
        
        
     - run: |
-          git clone https://github.com/apache/fineract.git
-          cd fineract
-          chmod 777 gradlew 
-          ls
-          ./gradlew clean bootJar
-          ls
+          fpc -V
