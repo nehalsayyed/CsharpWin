@@ -30,8 +30,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 5. Create valid project configuration
-      - name: Create Project Files
+      # 5. Set Global JVM & Memory Limits for Gradle (Fixes Java heap space error)
+      - name: Configure JVM & Memory Settings
+        run: |
+          mkdir -p ~/.gradle
+          cat << 'EOF' > ~/.gradle/gradle.properties
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.parallel=true
+          org.gradle.caching=false
+          android.useAndroidX=true
+          android.enableJetifier=false
+          EOF
+
+      # 6. Create valid project configuration files
+      - name: Create Configuration Files
         run: |
           cat << 'EOF' > package.json
           {
@@ -68,17 +80,8 @@ jobs:
           }
           EOF
 
-          cat << 'EOF' > react-native.config.js
-          module.exports = {
-            project: {
-              android: {},
-              ios: {},
-            },
-          };
-          EOF
-
-      # 6. Create App.js and Entry Index
-      - name: Create Source Code
+      # 7. Create App.js and Entry Point (index.js)
+      - name: Write Source Code
         run: |
           cat << 'EOF' > App.js
           import { Text, View } from 'react-native';
@@ -102,25 +105,27 @@ jobs:
           registerRootComponent(App);
           EOF
 
-      # 7. Install dependencies
-      - name: Install NPM Packages
+      # 8. Install exact dependencies
+      - name: Install NPM Dependencies
         run: npm install
 
-      # 8. Generate Android native directory
-      - name: Expo Prebuild
+      # 9. Generate Android native folder using Expo Prebuild
+      - name: Run Expo Prebuild
         run: npx expo prebuild --platform android --clean
 
-      # 9. Grant executable permission to Gradle
-      - name: Make Gradle Executable
+      # 10. Make Gradle Executable
+      - name: Grant Execute Permission to Gradle
         run: chmod +x android/gradlew
 
-      # 10. Build Debug APK via Gradle
-      - name: Build APK via Gradle
+      # 11. Compile APK via Gradle
+      - name: Build Android APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m'"
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      # 11. Upload APK Artifact
+      # 12. Upload downloadable APK Artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
