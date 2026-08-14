@@ -1,74 +1,14 @@
-name: Build Single Bundled AAR
+name: Build
 
-on:
-  workflow_dispatch:
+on: 
+   workflow_dispatch:
 
 jobs:
-  build:
+   build:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Clone repository recursively with all submodules
-      - name: Clone Repository
-        run: |
-          git clone --recursive https://github.com/Yalantis/Side-Menu.Android.git .
-
-      # 2. Set up Java 8
-      - name: Set up JDK 8
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '8'
-
-      # 3. Patch build files
-      - name: Patch Build Files
-        run: |
-          sed -i 's/jcenter()/mavenCentral()/g' build.gradle library/build.gradle
-          sed -i '/apply plugin: .android-reporting./d' build.gradle
-          sed -i '/android-maven-gradle-plugin/d' build.gradle
-          sed -i '/apply plugin: .com.github.dcendents.android-maven./d' library/build.gradle
-
-      # 4. Build library
-      - name: Build Library AAR
-        env:
-          ANDROID_NDK_HOME: ""
-        run: |
-          chmod +x gradlew
-          ./gradlew :library:assembleRelease --stacktrace
-
-      # 5. Bundle CircularReveal (io.codetail) into the main JAR/AAR
-      - name: Repackage into Single Jar
-        run: |
-          mkdir -p repackage/yalantis repackage/codetail
-          
-          # Extract Yalantis classes
-          unzip library/build/outputs/aar/*.aar classes.jar -d repackage/yalantis
-          
-          # Build CircularReveal submodule classes if present
-          ./gradlew :CircularReveal:assembleRelease || ./gradlew :CircularReveal:compileReleaseJavaWithJavac || true
-          
-          # Find and extract io.codetail compiled class files
-          find CircularReveal -name "*.jar" -o -name "*.aar" -o -name "classes" | while read file; do
-            if [[ "$file" == *.aar ]]; then
-              unzip -o "$file" classes.jar -d repackage/
-              unzip -o repackage/classes.jar -d repackage/combined/
-            elif [[ "$file" == *.jar ]]; then
-              unzip -o "$file" -d repackage/combined/
-            fi
-          done
-          
-          # Extract Yalantis classes into combined folder
-          unzip -o repackage/yalantis/classes.jar -d repackage/combined/
-          
-          # Create single standalone fat JAR
-          cd repackage/combined
-          zip -r ../../sidemenu-all.jar .
-          cd ../..
-
-      # 6. Upload single fat JAR for CodeAssist
-      - name: Upload Fat JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: sidemenu-all-jar
-          path: "sidemenu-all.jar"
-          
+       - run: |
+          git clone https://github.com/ybkuroki/go-webapp-sample.git
+          cd go-webapp-sample
+          docker build -t app .
+          docker run app
