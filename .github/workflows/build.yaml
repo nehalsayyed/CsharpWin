@@ -13,31 +13,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Setup NDK & Build Dependencies
+      # 2. Setup Build Tools
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build git zip
 
-      # 3. Setup Android NDK
-      - name: Setup Android NDK
-        uses: nontraditional/setup-android-ndk@v1
-        with:
-          ndk-version: r26b
-
-      # 4. Clone SFML Repository
+      # 3. Clone SFML Repository
       - name: Clone SFML
         run: |
           git clone --depth 1 --branch 2.6.1 https://github.com/SFML/SFML.git sfml-src
 
-      # 5. Configure CMake for Android (aarch64 - Termux standard)
+      # 4. Configure CMake using built-in Android NDK
       - name: Configure CMake
         run: |
           mkdir sfml-build
           cd sfml-build
           cmake ../sfml-src \
             -GNinja \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_shared \
@@ -46,13 +40,13 @@ jobs:
             -DSFML_BUILD_EXAMPLES=OFF \
             -DSFML_BUILD_TEST_SUITE=OFF
 
-      # 6. Compile SFML Libraries
+      # 5. Compile SFML Libraries
       - name: Build SFML
         run: |
           cd sfml-build
           ninja
 
-      # 7. Package Compiled Libraries and Headers
+      # 6. Package Compiled Libraries and Headers
       - name: Package SFML Libraries
         run: |
           mkdir -p sfml-termux/lib sfml-termux/include
@@ -60,8 +54,8 @@ jobs:
           # Copy compiled shared libraries (.so files)
           cp sfml-build/lib/*.so sfml-termux/lib/
           
-          # Copy STL libc++_shared.so from NDK
-          cp $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so sfml-termux/lib/
+          # Copy STL libc++_shared.so from the built-in NDK
+          cp $ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so sfml-termux/lib/
           
           # Copy C++ Include Headers
           cp -r sfml-src/include/SFML sfml-termux/include/
@@ -70,7 +64,7 @@ jobs:
           cd sfml-termux
           zip -r ../sfml-android-aarch64-termux.zip .
 
-      # 8. Upload Artifact to GitHub
+      # 7. Upload Artifact to GitHub
       - name: Upload SFML Package Artifact
         uses: actions/upload-artifact@v4
         with:
