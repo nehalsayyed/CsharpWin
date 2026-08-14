@@ -1,135 +1,80 @@
-name: Build Android APK
+name: Build SFML for Termux (Android aarch64)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
-    name: Generate App & Build APK
+  build-sfml:
+    name: Cross-Compile SFML for Termux
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+      # 1. Checkout Repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # 2. Setup NDK & Build Dependencies
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git zip
+
+      # 3. Setup Android NDK
+      - name: Setup Android NDK
+        uses: nontraditional/setup-android-ndk@v1
         with:
-          node-version: 20
+          ndk-version: r26b
 
-      # 3. Setup Java JDK
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: 17
-
-      # 4. Setup Android SDK
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      # 5. Set Global JVM & Memory Limits for Gradle (Fixes Java heap space error)
-      - name: Configure JVM & Memory Settings
+      # 4. Clone SFML Repository
+      - name: Clone SFML
         run: |
-          mkdir -p ~/.gradle
-          cat << 'EOF' > ~/.gradle/gradle.properties
-          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
-          org.gradle.parallel=true
-          org.gradle.caching=false
-          android.useAndroidX=true
-          android.enableJetifier=false
-          EOF
+          git clone --depth 1 --branch 2.6.1 https://github.com/SFML/SFML.git sfml-src
 
-      # 6. Create valid project configuration files
-      - name: Create Configuration Files
+      # 5. Configure CMake for Android (aarch64 - Termux standard)
+      - name: Configure CMake
         run: |
-          cat << 'EOF' > package.json
-          {
-            "name": "csharpwin",
-            "version": "1.0.0",
-            "main": "index.js",
-            "scripts": {
-              "start": "expo start",
-              "android": "expo start --android"
-            },
-            "dependencies": {
-              "expo": "~51.0.0",
-              "expo-device": "~6.0.2",
-              "expo-status-bar": "~1.12.1",
-              "react": "18.2.0",
-              "react-native": "0.74.5"
-            }
-          }
-          EOF
+          mkdir sfml-build
+          cd sfml-build
+          cmake ../sfml-src \
+            -GNinja \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DSFML_BUILD_EXAMPLES=OFF \
+            -DSFML_BUILD_TEST_SUITE=OFF
 
-          cat << 'EOF' > app.json
-          {
-            "expo": {
-              "name": "CsharpWin",
-              "slug": "csharpwin",
-              "version": "1.0.0",
-              "orientation": "portrait",
-              "userInterfaceStyle": "light",
-              "newArchEnabled": false,
-              "android": {
-                "package": "com.csharpwin.app"
-              }
-            }
-          }
-          EOF
-
-      # 7. Create App.js and Entry Point (index.js)
-      - name: Write Source Code
+      # 6. Compile SFML Libraries
+      - name: Build SFML
         run: |
-          cat << 'EOF' > App.js
-          import { Text, View } from 'react-native';
-          import * as Device from 'expo-device';
+          cd sfml-build
+          ninja
 
-          export default function App() {
-            return (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text>
-                  {Device.manufacturer}: {Device.modelName}
-                </Text>
-              </View>
-            );
-          }
-          EOF
-
-          cat << 'EOF' > index.js
-          import { registerRootComponent } from 'expo';
-          import App from './App';
-
-          registerRootComponent(App);
-          EOF
-
-      # 8. Install exact dependencies
-      - name: Install NPM Dependencies
-        run: npm install
-
-      # 9. Generate Android native folder using Expo Prebuild
-      - name: Run Expo Prebuild
-        run: npx expo prebuild --platform android --clean
-
-      # 10. Make Gradle Executable
-      - name: Grant Execute Permission to Gradle
-        run: chmod +x android/gradlew
-
-      # 11. Compile APK via Gradle
-      - name: Build Android APK
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m'"
+      # 7. Package Compiled Libraries and Headers
+      - name: Package SFML Libraries
         run: |
-          cd android
-          ./gradlew assembleDebug --no-daemon
+          mkdir -p sfml-termux/lib sfml-termux/include
+          
+          # Copy compiled shared libraries (.so files)
+          cp sfml-build/lib/*.so sfml-termux/lib/
+          
+          # Copy STL libc++_shared.so from NDK
+          cp $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so sfml-termux/lib/
+          
+          # Copy C++ Include Headers
+          cp -r sfml-src/include/SFML sfml-termux/include/
+          
+          # Create ZIP file
+          cd sfml-termux
+          zip -r ../sfml-android-aarch64-termux.zip .
 
-      # 12. Upload downloadable APK Artifact
-      - name: Upload APK Artifact
+      # 8. Upload Artifact to GitHub
+      - name: Upload SFML Package Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: sfml-android-aarch64-termux
+          path: sfml-android-aarch64-termux.zip
           retention-days: 7
           
