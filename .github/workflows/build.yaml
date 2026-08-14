@@ -8,28 +8,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clone the Yalantis repo and pull submodules (CircularReveal)
-      - name: Clone Yalantis Repository
+      # 1. Clone Yalantis Repository recursively
+      - name: Clone Repository
         run: |
           git clone --recursive https://github.com/Yalantis/Side-Menu.Android.git .
 
-      # 2. Set up JDK 17 (Required by modern Ubuntu runners & SDK tools)
-      - name: Set up JDK 17
+      # 2. Set up Java 8 (Required for Gradle 4.10.1 & AGP 3.3.0)
+      - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'zulu'
+          java-version: '8'
 
-      # 3. Build the AAR file
+      # 3. Patch broken legacy configs (Remove jcenter & obsolete plugins)
+      - name: Patch Build Files
+        run: |
+          # Replace dead jcenter() with mavenCentral()
+          sed -i 's/jcenter()/mavenCentral()/g' build.gradle library/build.gradle
+          
+          # Remove broken plugins causing crashes
+          sed -i '/apply plugin: .android-reporting./d' build.gradle
+          sed -i '/android-maven-gradle-plugin/d' build.gradle
+          sed -i '/apply plugin: .com.github.dcendents.android-maven./d' library/build.gradle
+
+      # 4. Build AAR with empty NDK env to avoid path errors
       - name: Build Library AAR
+        env:
+          ANDROID_NDK_HOME: ""
         run: |
           chmod +x gradlew
           ./gradlew :library:assembleRelease --stacktrace
 
-      # 4. Upload the compiled .aar artifact
+      # 5. Upload finished AAR artifact
       - name: Upload AAR Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sidemenu-release
+          name: sidemenu-release-aar
           path: "library/build/outputs/aar/*.aar"
           
