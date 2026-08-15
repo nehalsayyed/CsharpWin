@@ -18,8 +18,11 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # Uses official major version v1 release for the Action runner
       - name: Set up Kani Rust Verifier
-        uses: model-checking/kani-github-action@v0.56
+        uses: model-checking/kani-github-action@v1
+        with:
+          kani-version: 'latest'
 
       - name: Create Inline Rust Project with Kani Proof
         run: |
@@ -41,7 +44,7 @@ jobs:
           fn check_add_no_overflow() {
               let a: u32 = kani::any();
               let b: u32 = kani::any();
-              // Prevent overflow for the test case
+              
               kani::assume(a < 1000);
               kani::assume(b < 1000);
               
@@ -61,8 +64,8 @@ jobs:
       # ==========================================
       # STEP 2: Ada + SPARK (Setup, Create & Run)
       # ==========================================
-      - name: Set up Alire (Ada Package Manager)
-        uses: alire-project/setup-alire@v3
+      - name: Install GNAT & SPARK Toolchain
+        uses: gnat-actions/setup-spark@v1
 
       - name: Create Inline Ada/SPARK Project
         run: |
@@ -107,11 +110,7 @@ jobs:
           end Main;
           EOF
 
-      - name: Provision GNAT & SPARK Toolchain
-        working-directory: ./ada_demo
-        run: alr --non-interactive toolchain --select
-
       - name: Run SPARK Prover (GNATprove)
         working-directory: ./ada_demo
-        run: alr exec -- gnatprove -P ada_demo.gpr --level=1 --report=all
+        run: gnatprove -P ada_demo.gpr --level=1 --report=all
         
