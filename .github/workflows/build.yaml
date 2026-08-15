@@ -51,12 +51,12 @@ jobs:
             -DGGML_LLAMAFILE=OFF
             -DBUILD_SHARED_LIBS=ON
             
-          # Target platform override for pip
+          # Target platform override for pip tag
           _PYTHON_HOST_PLATFORM: linux-aarch64
 
         run: |
           mkdir -p ../dist
-          python -m pip wheel . --no-deps -w ../dist/
+          python -m pip wheel . --no-build-isolation --no-deps -w ../dist/
 
       - name: Upload Plug-and-Play Wheel
         uses: actions/upload-artifact@v4
