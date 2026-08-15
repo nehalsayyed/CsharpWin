@@ -21,7 +21,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
       # =======================================================
       # STEP 1: Scaffolding New Capacitor Project & Dependencies
@@ -49,7 +49,7 @@ jobs:
           cd my-app
           mkdir -p dist
           
-          # Create sensitive source JS file
+          # Create source JS file
           cat << 'EOF' > dist/app.js
           (function() {
               const apiSecretKey = "SUPER_SECRET_API_TOKEN_12345";
@@ -77,7 +77,7 @@ jobs:
           </html>
           EOF
 
-          # Obfuscate JavaScript web bundle thoroughly
+          # Obfuscate JavaScript web bundle
           npx javascript-obfuscator ./dist/app.js --output ./dist/app.js \
             --compact true \
             --control-flow-flattening true \
@@ -90,9 +90,9 @@ jobs:
             --split-strings true
 
       # =======================================================
-      # STEP 3: Generate Android Platform & Configure ProGuard + Fix Duplicates
+      # STEP 3: Add Android Platform & Inject Correct Configurations
       # =======================================================
-      - name: Add Android Platform & Resolve Dependencies
+      - name: Add Android Platform & Setup R8 + Dependency Overrides
         run: |
           cd my-app
           
@@ -100,39 +100,61 @@ jobs:
           npx cap add android
           npx cap sync android
 
-          # FIX: Inject Resolution Strategy into root build.gradle to prevent duplicate Kotlin stdlib classes
-          cat << 'EOF' >> android/build.gradle
-
+          # 1. FIX: Inject Kotlin stdlib resolution strategy into root build.gradle safely
+          python3 -c '
+          path = "android/build.gradle"
+          with open(path, "r") as f:
+              content = f.read()
+          
+          resolution_rule = """
           allprojects {
               configurations.all {
-                  resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-                      def requested = details.requested
-                      if (requested.group == 'org.jetbrains.kotlin') {
-                          if (requested.name == 'kotlin-stdlib-jdk7' || requested.name == 'kotlin-stdlib-jdk8') {
-                              details.useTarget "org.jetbrains.kotlin:kotlin-stdlib:${requested.version}"
+                  resolutionStrategy.eachDependency { details ->
+                      if (details.requested.group == "org.jetbrains.kotlin") {
+                          if (details.requested.name == "kotlin-stdlib-jdk7" || details.requested.name == "kotlin-stdlib-jdk8") {
+                              details.useTarget("org.jetbrains.kotlin:kotlin-stdlib:" + details.requested.version)
                           }
                       }
                   }
               }
           }
-          EOF
+          """
+          with open(path, "w") as f:
+              f.write(content + "\n" + resolution_rule)
+          '
 
-          # Enable Minification (R8/ProGuard Obfuscation) in Gradle
-          BUILD_GRADLE="android/app/build.gradle"
-          sed -i 's/minifyEnabled false/minifyEnabled true/g' $BUILD_GRADLE
-          sed -i 's/shrinkResources false/shrinkResources true/g' $BUILD_GRADLE
-
-          # Add aggressive ProGuard rules for native Java/Kotlin code
-          PROGUARD_RULES="android/app/proguard-rules.pro"
-          cat << 'EOF' >> $PROGUARD_RULES
-          # Rename classes, fields, and methods aggressively
-          -repackageclasses ''
-          -allowaccessmodification
-          -attributes *Annotation*
+          # 2. FIX: Safely enable R8 obfuscation in app/build.gradle without breaking resource shrinking
+          python3 -c '
+          path = "android/app/build.gradle"
+          with open(path, "r") as f:
+              content = f.read()
           
-          # Preserve essential Capacitor bridge components
+          # Ensure release buildType enables minification properly
+          content = content.replace("minifyEnabled false", "minifyEnabled true")
+          content = content.replace("shrinkResources false", "shrinkResources false") # Kept false to avoid R8 un-referenced resource stripping errors on dynamic WebViews
+          
+          with open(path, "w") as f:
+              f.write(content)
+          '
+
+          # 3. FIX: Write accurate, valid ProGuard/R8 rules
+          PROGUARD_RULES="android/app/proguard-rules.pro"
+          cat << 'EOF' > $PROGUARD_RULES
+          # R8 Attribute Keep Rules
+          -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+
+          # Preserve essential Capacitor Native Bridge reflection methods
           -keep public class com.getcapacitor.** { *; }
-          -keep public class * extends com.getcapacitor.Plugin
+          -keep class * extends com.getcapacitor.Plugin { *; }
+          -keep class * extends com.getcapacitor.Bridge { *; }
+          -keepclassmembers class * {
+              @com.getcapacitor.PluginMethod <methods>;
+              @android.webkit.JavascriptInterface <methods>;
+          }
+
+          # Suppress web view internal warnings during R8 optimization
+          -dontwarn android.webkit.**
+          -dontwarn com.getcapacitor.**
           EOF
 
       # =======================================================
@@ -142,7 +164,7 @@ jobs:
         run: |
           cd my-app/android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon
 
       # =======================================================
       # STEP 5: Upload Artifact
