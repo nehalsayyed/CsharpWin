@@ -11,5 +11,7 @@ jobs:
       # 1. Explicitly clone the specific external repository
       - name: Running 
         run: |
-         sudo apt install cpu-checker -y
-         kvm-ok
+         git clone https://github.com/tsoding/eepers.git
+         cd eepers
+         chmod 777 build-linux.sh
+         ./build-linux.sh
