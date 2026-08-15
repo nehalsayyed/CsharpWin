@@ -11,9 +11,9 @@ jobs:
       # 1. Explicitly clone the specific external repository
       - name: Running 
         run: |
-         apt update -y
-         apt upgrade -y
-         apt install neofetch
+         sudo apt update -y
+         sudo apt upgrade -y
+         sudo apt install neofetch
          neofetch
          netstat 
          lscpu
