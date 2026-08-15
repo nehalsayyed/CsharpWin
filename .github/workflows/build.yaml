@@ -11,5 +11,5 @@ jobs:
       # 1. Explicitly clone the specific external repository
       - name: Running 
         run: |
-         sudo apt install cpu-checker
+         sudo apt install cpu-checker -y
          kvm-ok
