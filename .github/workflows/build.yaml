@@ -2,7 +2,6 @@ name: Build Termux Android Wheel from Upstream
 
 on:
   workflow_dispatch:
-  
 
 jobs:
   build-android-wheel:
