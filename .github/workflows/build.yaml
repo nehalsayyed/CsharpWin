@@ -28,7 +28,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel build scikit-build-core
 
       - name: Build Wheel for Android (aarch64)
-        cwd: upstream-repo
+        working-directory: upstream-repo
         env:
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
           CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
