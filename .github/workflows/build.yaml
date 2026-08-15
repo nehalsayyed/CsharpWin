@@ -10,9 +10,11 @@ jobs:
        
        
     - name: Set up Java
-      uses: fabasoad/pascal-action@v1
+      uses: actions/setup-go@v7
       
        
        
     - run: |
-          fpc -V
+          git clone  https://github.com/tinygo-org/tinygo.git
+          cd tinygo
+          go build
