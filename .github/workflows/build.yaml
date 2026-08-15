@@ -11,6 +11,7 @@ jobs:
       # 1. Explicitly clone the specific external repository
       - name: Running 
         run: |
+         sudo apt install gnat -y
          git clone https://github.com/tsoding/eepers.git
          cd eepers
          chmod 777 build-linux.sh
