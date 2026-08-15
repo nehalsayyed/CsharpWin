@@ -1,66 +1,42 @@
-name: Build Android APK
+name: Package noVNC Release
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-pack:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout noVNC Repository
         uses: actions/checkout@v4
+        with:
+          repository: novnc/noVNC
+          ref: master
+          path: novnc
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Initialize Expo App in Temp Directory
+      - name: Install & Package Static App
         run: |
-          npx create-expo-app@latest temp-app --template blank --yes
-          cd temp-app
-          npx expo install expo-device
+          cd novnc
+          npm ci
+          npm run build --if-present
+          
+          # Clean non-production development overhead
+          rm -rf node_modules .git .github tests po docs
+          
+          # Create single output archive
+          cd ..
+          zip -r novnc-static-app.zip novnc/
 
-      - name: Write App.js
-        run: |
-          cat << 'EOF' > temp-app/App.js
-          import { Text, View } from 'react-native';
-          import * as Device from 'expo-device';
-
-          export default function App() {
-            return (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text>
-                  {Device.manufacturer}: {Device.modelName}
-                </Text>
-              </View>
-            );
-          }
-          EOF
-
-      - name: Prebuild Native Android Project
-        run: |
-          cd temp-app
-          npx expo prebuild --platform android
-
-      - name: Build Android Release APK
-        run: |
-          cd temp-app/android
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-
-      - name: Upload APK Artifact
+      - name: Upload Static App Bundle
         uses: actions/upload-artifact@v4
         with:
-          name: app-release.apk
-          path: temp-app/android/app/build/outputs/apk/release/app-release.apk
+          name: novnc-static-app
+          path: novnc-static-app.zip
+          retention-days: 7
           
