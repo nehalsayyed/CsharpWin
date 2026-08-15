@@ -57,11 +57,15 @@ jobs:
           end Main;
           EOF
 
-      - name: Provision GNAT & SPARK Toolchain
+      - name: Provision GNAT Compiler
         working-directory: ./ada_demo
         run: |
-          alr --non-interactive toolchain --select gnatprove
           alr --non-interactive toolchain --select gnat_native
+
+      - name: Install GNATprove Crate
+        working-directory: ./ada_demo
+        run: |
+          alr --non-interactive with gnatprove
 
       - name: Run SPARK Prover (GNATprove)
         working-directory: ./ada_demo
