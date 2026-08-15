@@ -1,59 +1,138 @@
-name: Rust Kani Verification
+name: Build Obfuscated Capacitor APK
 
 on:
   workflow_dispatch:
 
 jobs:
-  verify-rust:
-    name: Run Kani Test
+  build-android:
+    name: Build & Obfuscate Capacitor App
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Install Kani
-        run: |
-          cargo install --locked kani-verifier
-          cargo kani setup
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
 
-      - name: Create Inline Rust Project
+      # =======================================================
+      # STEP 1: Scaffolding New Capacitor Project & Dependencies
+      # =======================================================
+      - name: Initialize Capacitor App & Tools
         run: |
-          mkdir -p rust_demo/src
-          cat << 'EOF' > rust_demo/Cargo.toml
-          [package]
-          name = "rust_demo"
-          version = "0.1.0"
-          edition = "2021"
+          mkdir -p my-app
+          cd my-app
+          
+          # Initialize package.json
+          npm init -y
+          
+          # Install Capacitor Core, CLI, Android Platform, and JS Obfuscator
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install -D javascript-obfuscator
+          
+          # Initialize Capacitor configuration
+          npx cap init "SecureApp" "com.example.secureapp" --web-dir "dist"
+
+      # =======================================================
+      # STEP 2: Create Web App & Apply Web Obfuscation
+      # =======================================================
+      - name: Create Web Assets & Obfuscate JS/HTML
+        run: |
+          cd my-app
+          mkdir -p dist
+          
+          # Create sensitive source JS file
+          cat << 'EOF' > dist/app.js
+          (function() {
+              const apiSecretKey = "SUPER_SECRET_API_TOKEN_12345";
+              console.log("App initialized securely.");
+              document.addEventListener("DOMContentLoaded", () => {
+                  document.getElementById("status").innerText = "Obfuscated App Running!";
+              });
+          })();
           EOF
 
-          cat << 'EOF' > rust_demo/src/main.rs
-          fn add(a: u32, b: u32) -> u32 {
-              a + b
-          }
-
-          #[cfg(kani)]
-          #[kani::proof]
-          fn check_add_no_overflow() {
-              let a: u32 = kani::any();
-              let b: u32 = kani::any();
-              
-              kani::assume(a < 1000);
-              kani::assume(b < 1000);
-              
-              let result = add(a, b);
-              assert!(result >= a);
-          }
-
-          fn main() {
-              println!("Rust project created successfully.");
-          }
+          # Create HTML file
+          cat << 'EOF' > dist/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Secure App</title>
+              <script src="app.js"></script>
+          </head>
+          <body>
+              <h1>Secure Capacitor App</h1>
+              <p id="status">Loading...</p>
+          </body>
+          </html>
           EOF
 
-      - name: Run Kani Verification
-        working-directory: ./rust_demo
-        run: cargo kani
-        
+          # Obfuscate JavaScript web bundle thoroughly
+          npx javascript-obfuscator ./dist/app.js --output ./dist/app.js \
+            --compact true \
+            --control-flow-flattening true \
+            --control-flow-flattening-threshold 1 \
+            --dead-code-injection true \
+            --dead-code-injection-threshold 1 \
+            --string-array true \
+            --string-array-encoding 'base64' \
+            --string-array-threshold 1 \
+            --split-strings true
+
+      # =======================================================
+      # STEP 3: Generate Android Platform & Configure ProGuard
+      # =======================================================
+      - name: Add Android Platform & Enable Native R8/ProGuard
+        run: |
+          cd my-app
+          
+          # Add Android target and sync web assets
+          npx cap add android
+          npx cap sync android
+
+          # Enable Minification (R8/ProGuard Obfuscation) in Gradle
+          BUILD_GRADLE="android/app/build.gradle"
+          sed -i 's/minifyEnabled false/minifyEnabled true/g' $BUILD_GRADLE
+          sed -i 's/shrinkResources false/shrinkResources true/g' $BUILD_GRADLE
+
+          # Add aggressive ProGuard rules for native Java/Kotlin code
+          PROGUARD_RULES="android/app/proguard-rules.pro"
+          cat << 'EOF' >> $PROGUARD_RULES
+          # Rename all classes, fields, and methods aggressively
+          -repackageclasses ''
+          -allowaccessmodification
+          -attributes *Annotation*
+          
+          # Preserve essential Capacitor bridge components
+          -keep public class com.getcapacitor.** { *; }
+          -keep public class * extends com.getcapacitor.Plugin
+          EOF
+
+      # =======================================================
+      # STEP 4: Build Native Android APK
+      # =======================================================
+      - name: Build Obfuscated Release APK
+        run: |
+          cd my-app/android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      # =======================================================
+      # STEP 5: Upload Artifact
+      # =======================================================
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obfuscated-capacitor-app
+          path: my-app/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          
