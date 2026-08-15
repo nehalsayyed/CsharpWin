@@ -23,13 +23,13 @@ jobs:
       - name: Install & Package Static App
         run: |
           cd novnc
-          npm ci
+          npm install
           npm run build --if-present
           
-          # Clean non-production development overhead
+          # Remove development overhead
           rm -rf node_modules .git .github tests po docs
           
-          # Create single output archive
+          # Create static app zip archive
           cd ..
           zip -r novnc-static-app.zip novnc/
 
