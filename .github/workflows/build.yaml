@@ -18,11 +18,14 @@ jobs:
           unzip alr-2.0.1-bin-x86_64-linux.zip -d alire_bin
           echo "$PWD/alire_bin/bin" >> $GITHUB_PATH
 
-      - name: Create Inline Ada/SPARK Project
+      - name: Initialize Alire Workspace & SPARK Project
         run: |
-          mkdir -p ada_demo/src
-          
-          cat << 'EOF' > ada_demo/ada_demo.gpr
+          # 1. Initialize a valid Alire workspace (creates alire.toml)
+          alr --non-interactive init --bin ada_demo
+          cd ada_demo
+
+          # 2. Overwrite default files with our custom Ada/SPARK code
+          cat << 'EOF' > ada_demo.gpr
           project Ada_Demo is
              for Source_Dirs use ("src");
              for Object_Dir use "obj";
@@ -30,7 +33,7 @@ jobs:
           end Ada_Demo;
           EOF
 
-          cat << 'EOF' > ada_demo/src/math_ops.ads
+          cat << 'EOF' > src/math_ops.ads
           package Math_Ops with SPARK_Mode => On is
              subtype Bounded_Int is Integer range 0 .. 1000;
              
@@ -39,7 +42,7 @@ jobs:
           end Math_Ops;
           EOF
 
-          cat << 'EOF' > ada_demo/src/math_ops.adb
+          cat << 'EOF' > src/math_ops.adb
           package body Math_Ops with SPARK_Mode => On is
              function Add (A, B : Bounded_Int) return Integer is
              begin
@@ -48,7 +51,7 @@ jobs:
           end Math_Ops;
           EOF
 
-          cat << 'EOF' > ada_demo/src/main.adb
+          cat << 'EOF' > src/main.adb
           with Math_Ops;
           procedure Main is
              Result : Integer;
@@ -57,14 +60,12 @@ jobs:
           end Main;
           EOF
 
-      - name: Provision GNAT Compiler
+      - name: Provision GNAT Compiler & Add GNATprove Dependency
         working-directory: ./ada_demo
         run: |
+          # Select default compiler toolchain
           alr --non-interactive toolchain --select gnat_native
-
-      - name: Install GNATprove Crate
-        working-directory: ./ada_demo
-        run: |
+          # Add gnatprove dependency to the workspace alire.toml
           alr --non-interactive with gnatprove
 
       - name: Run SPARK Prover (GNATprove)
