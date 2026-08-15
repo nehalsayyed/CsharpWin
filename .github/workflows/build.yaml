@@ -17,4 +17,5 @@ jobs:
     - run: |
           git clone  https://github.com/tinygo-org/tinygo.git
           cd tinygo
-          go build
+          docker build -t app .
+          docker run app
