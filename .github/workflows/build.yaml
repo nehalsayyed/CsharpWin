@@ -1,74 +1,59 @@
-name: SPARK Ada Verification
+name: Rust Kani Verification
 
 on:
   workflow_dispatch:
 
 jobs:
-  verify:
-    name: Run SPARK Test
+  verify-rust:
+    name: Run Kani Test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Alire Package Manager
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Kani
         run: |
-          wget https://github.com/alire-project/alire/releases/download/v2.0.1/alr-2.0.1-bin-x86_64-linux.zip
-          unzip alr-2.0.1-bin-x86_64-linux.zip -d alire_bin
-          echo "$PWD/alire_bin/bin" >> $GITHUB_PATH
+          cargo install --locked kani-verifier
+          cargo kani setup
 
-      - name: Initialize Alire Workspace & SPARK Project
+      - name: Create Inline Rust Project
         run: |
-          # 1. Initialize a valid Alire workspace (creates alire.toml)
-          alr --non-interactive init --bin ada_demo
-          cd ada_demo
-
-          # 2. Overwrite default files with our custom Ada/SPARK code
-          cat << 'EOF' > ada_demo.gpr
-          project Ada_Demo is
-             for Source_Dirs use ("src");
-             for Object_Dir use "obj";
-             for Main use ("main.adb");
-          end Ada_Demo;
+          mkdir -p rust_demo/src
+          cat << 'EOF' > rust_demo/Cargo.toml
+          [package]
+          name = "rust_demo"
+          version = "0.1.0"
+          edition = "2021"
           EOF
 
-          cat << 'EOF' > src/math_ops.ads
-          package Math_Ops with SPARK_Mode => On is
-             subtype Bounded_Int is Integer range 0 .. 1000;
-             
-             function Add (A, B : Bounded_Int) return Integer
-               with Post => Add'Result = A + B;
-          end Math_Ops;
+          cat << 'EOF' > rust_demo/src/main.rs
+          fn add(a: u32, b: u32) -> u32 {
+              a + b
+          }
+
+          #[cfg(kani)]
+          #[kani::proof]
+          fn check_add_no_overflow() {
+              let a: u32 = kani::any();
+              let b: u32 = kani::any();
+              
+              kani::assume(a < 1000);
+              kani::assume(b < 1000);
+              
+              let result = add(a, b);
+              assert!(result >= a);
+          }
+
+          fn main() {
+              println!("Rust project created successfully.");
+          }
           EOF
 
-          cat << 'EOF' > src/math_ops.adb
-          package body Math_Ops with SPARK_Mode => On is
-             function Add (A, B : Bounded_Int) return Integer is
-             begin
-                return A + B;
-             end Add;
-          end Math_Ops;
-          EOF
-
-          cat << 'EOF' > src/main.adb
-          with Math_Ops;
-          procedure Main is
-             Result : Integer;
-          begin
-             Result := Math_Ops.Add (10, 20);
-          end Main;
-          EOF
-
-      - name: Provision GNAT Compiler & Add GNATprove Dependency
-        working-directory: ./ada_demo
-        run: |
-          # Select default compiler toolchain
-          alr --non-interactive toolchain --select gnat_native
-          # Add gnatprove dependency to the workspace alire.toml
-          alr --non-interactive with gnatprove
-
-      - name: Run SPARK Prover (GNATprove)
-        working-directory: ./ada_demo
-        run: alr exec -- gnatprove -P ada_demo.gpr --level=1 --report=all
+      - name: Run Kani Verification
+        working-directory: ./rust_demo
+        run: cargo kani
         
