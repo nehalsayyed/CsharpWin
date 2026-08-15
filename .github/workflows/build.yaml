@@ -1,42 +1,117 @@
-name: Package noVNC Release
+name: Standalone Verification Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-and-pack:
+  verify:
+    name: Run Kani and SPARK Tests
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout noVNC Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          repository: novnc/noVNC
-          ref: master
-          path: novnc
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      # ==========================================
+      # STEP 1: Rust + Kani (Setup, Create & Run)
+      # ==========================================
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install & Package Static App
+      - name: Set up Kani Rust Verifier
+        uses: model-checking/kani-github-action@v0.56
+
+      - name: Create Inline Rust Project with Kani Proof
         run: |
-          cd novnc
-          npm install
-          npm run build --if-present
-          
-          # Remove development overhead
-          rm -rf node_modules .git .github tests po docs
-          
-          # Create static app zip archive
-          cd ..
-          zip -r novnc-static-app.zip novnc/
+          mkdir -p rust_demo/src
+          cat << 'EOF' > rust_demo/Cargo.toml
+          [package]
+          name = "rust_demo"
+          version = "0.1.0"
+          edition = "2021"
+          EOF
 
-      - name: Upload Static App Bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: novnc-static-app
-          path: novnc-static-app.zip
-          retention-days: 7
+          cat << 'EOF' > rust_demo/src/main.rs
+          fn add(a: u32, b: u32) -> u32 {
+              a + b
+          }
+
+          #[cfg(kani)]
+          #[kani::proof]
+          fn check_add_no_overflow() {
+              let a: u32 = kani::any();
+              let b: u32 = kani::any();
+              // Prevent overflow for the test case
+              kani::assume(a < 1000);
+              kani::assume(b < 1000);
+              
+              let result = add(a, b);
+              assert!(result >= a);
+          }
+
+          fn main() {
+              println!("Rust project created successfully.");
+          }
+          EOF
+
+      - name: Run Kani Verification
+        working-directory: ./rust_demo
+        run: cargo kani
+
+      # ==========================================
+      # STEP 2: Ada + SPARK (Setup, Create & Run)
+      # ==========================================
+      - name: Set up Alire (Ada Package Manager)
+        uses: alire-project/setup-alire@v3
+
+      - name: Create Inline Ada/SPARK Project
+        run: |
+          mkdir -p ada_demo/src
           
+          # Project file
+          cat << 'EOF' > ada_demo/ada_demo.gpr
+          project Ada_Demo is
+             for Source_Dirs use ("src");
+             for Object_Dir use "obj";
+             for Main use ("main.adb");
+          end Ada_Demo;
+          EOF
+
+          # Package Spec with SPARK Contract
+          cat << 'EOF' > ada_demo/src/math_ops.ads
+          package Math_Ops with SPARK_Mode => On is
+             subtype Bounded_Int is Integer range 0 .. 1000;
+             
+             function Add (A, B : Bounded_Int) return Integer
+               with Post => Add'Result = A + B;
+          end Math_Ops;
+          EOF
+
+          # Package Body
+          cat << 'EOF' > ada_demo/src/math_ops.adb
+          package body Math_Ops with SPARK_Mode => On is
+             function Add (A, B : Bounded_Int) return Integer is
+             begin
+                return A + B;
+             end Add;
+          end Math_Ops;
+          EOF
+
+          # Main File
+          cat << 'EOF' > ada_demo/src/main.adb
+          with Math_Ops;
+          procedure Main is
+             Result : Integer;
+          begin
+             Result := Math_Ops.Add (10, 20);
+          end Main;
+          EOF
+
+      - name: Provision GNAT & SPARK Toolchain
+        working-directory: ./ada_demo
+        run: alr --non-interactive toolchain --select
+
+      - name: Run SPARK Prover (GNATprove)
+        working-directory: ./ada_demo
+        run: alr exec -- gnatprove -P ada_demo.gpr --level=1 --report=all
+        
