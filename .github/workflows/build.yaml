@@ -11,9 +11,5 @@ jobs:
       # 1. Explicitly clone the specific external repository
       - name: Running 
         run: |
-         sudo apt update -y
-         sudo apt upgrade -y
-         sudo apt install neofetch
-         neofetch
-         netstat 
-         lscpu
+         sudo apt install cpu-checker
+         kvm-ok
