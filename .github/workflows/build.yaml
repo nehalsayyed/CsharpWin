@@ -90,15 +90,32 @@ jobs:
             --split-strings true
 
       # =======================================================
-      # STEP 3: Generate Android Platform & Configure ProGuard
+      # STEP 3: Generate Android Platform & Configure ProGuard + Fix Duplicates
       # =======================================================
-      - name: Add Android Platform & Enable Native R8/ProGuard
+      - name: Add Android Platform & Resolve Dependencies
         run: |
           cd my-app
           
           # Add Android target and sync web assets
           npx cap add android
           npx cap sync android
+
+          # FIX: Inject Resolution Strategy into root build.gradle to prevent duplicate Kotlin stdlib classes
+          cat << 'EOF' >> android/build.gradle
+
+          allprojects {
+              configurations.all {
+                  resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+                      def requested = details.requested
+                      if (requested.group == 'org.jetbrains.kotlin') {
+                          if (requested.name == 'kotlin-stdlib-jdk7' || requested.name == 'kotlin-stdlib-jdk8') {
+                              details.useTarget "org.jetbrains.kotlin:kotlin-stdlib:${requested.version}"
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
           # Enable Minification (R8/ProGuard Obfuscation) in Gradle
           BUILD_GRADLE="android/app/build.gradle"
@@ -108,7 +125,7 @@ jobs:
           # Add aggressive ProGuard rules for native Java/Kotlin code
           PROGUARD_RULES="android/app/proguard-rules.pro"
           cat << 'EOF' >> $PROGUARD_RULES
-          # Rename all classes, fields, and methods aggressively
+          # Rename classes, fields, and methods aggressively
           -repackageclasses ''
           -allowaccessmodification
           -attributes *Annotation*
