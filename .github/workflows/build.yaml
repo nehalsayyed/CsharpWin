@@ -13,11 +13,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Set up Android NDK
+      - name: Locate Android NDK
         id: setup-ndk
-        uses: nszin/setup-android-ndk@v1
-        with:
-          ndk-version: r26b
+        run: |
+          # Use pre-installed NDK on ubuntu-latest or install via sdkmanager
+          if [ -d "$ANDROID_SDK_ROOT/ndk-bundle" ]; then
+            NDK_PATH="$ANDROID_SDK_ROOT/ndk-bundle"
+          else
+            echo "Installing Android NDK..."
+            yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
+            NDK_PATH="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
+          fi
+          echo "ndk-path=$NDK_PATH" >> $GITHUB_OUTPUT
 
       - name: Clone llama-cpp-python Repository
         run: |
