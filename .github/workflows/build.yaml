@@ -16,7 +16,6 @@ jobs:
       - name: Locate Android NDK
         id: setup-ndk
         run: |
-          # Use pre-installed NDK on ubuntu-latest or install via sdkmanager
           if [ -d "$ANDROID_SDK_ROOT/ndk-bundle" ]; then
             NDK_PATH="$ANDROID_SDK_ROOT/ndk-bundle"
           else
@@ -32,7 +31,7 @@ jobs:
 
       - name: Install Build Dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build scikit-build-core
+          python -m pip install --upgrade pip setuptools wheel build scikit-build-core cmake ninja
 
       - name: Build Wheel for Android (aarch64)
         working-directory: upstream-repo
@@ -41,18 +40,18 @@ jobs:
           CC: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           CXX: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++
           
-          # Pass CMake parameters for Android cross-compilation
+          # Explicit CMake toolchain flags for Android
           SKBUILD_CMAKE_ARGS: >-
-            -DCMAKE_SYSTEM_NAME=Android
-            -DCMAKE_SYSTEM_VERSION=24
-            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a
-            -DCMAKE_ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }}
-            -DCMAKE_ANDROID_STL_TYPE=c++_shared
+            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
+            -DANDROID_ABI=arm64-v8a
+            -DANDROID_PLATFORM=android-24
+            -DANDROID_STL=c++_shared
             -DGGML_NATIVE=OFF
             -DGGML_OPENMP=OFF
             -DGGML_LLAMAFILE=OFF
+            -DBUILD_SHARED_LIBS=ON
             
-          # Target platform tag override
+          # Target platform override for pip
           _PYTHON_HOST_PLATFORM: linux-aarch64
 
         run: |
