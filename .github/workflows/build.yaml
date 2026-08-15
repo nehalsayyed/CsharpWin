@@ -1,77 +1,27 @@
-name: Standalone Verification Test
+name: SPARK Ada Verification
 
 on:
   workflow_dispatch:
 
 jobs:
   verify:
-    name: Run Kani and SPARK Tests
+    name: Run SPARK Test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ==========================================
-      # STEP 1: Rust + Kani (Setup, Create & Run)
-      # ==========================================
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      # Uses official major version v1 release for the Action runner
-      - name: Set up Kani Rust Verifier
-        uses: model-checking/kani-github-action@v1
-        with:
-          kani-version: 'latest'
-
-      - name: Create Inline Rust Project with Kani Proof
+      - name: Install Alire Package Manager
         run: |
-          mkdir -p rust_demo/src
-          cat << 'EOF' > rust_demo/Cargo.toml
-          [package]
-          name = "rust_demo"
-          version = "0.1.0"
-          edition = "2021"
-          EOF
-
-          cat << 'EOF' > rust_demo/src/main.rs
-          fn add(a: u32, b: u32) -> u32 {
-              a + b
-          }
-
-          #[cfg(kani)]
-          #[kani::proof]
-          fn check_add_no_overflow() {
-              let a: u32 = kani::any();
-              let b: u32 = kani::any();
-              
-              kani::assume(a < 1000);
-              kani::assume(b < 1000);
-              
-              let result = add(a, b);
-              assert!(result >= a);
-          }
-
-          fn main() {
-              println!("Rust project created successfully.");
-          }
-          EOF
-
-      - name: Run Kani Verification
-        working-directory: ./rust_demo
-        run: cargo kani
-
-      # ==========================================
-      # STEP 2: Ada + SPARK (Setup, Create & Run)
-      # ==========================================
-      - name: Install GNAT & SPARK Toolchain
-        uses: gnat-actions/setup-spark@v1
+          wget https://github.com/alire-project/alire/releases/download/v2.0.1/alr-2.0.1-bin-x86_64-linux.zip
+          unzip alr-2.0.1-bin-x86_64-linux.zip -d alire_bin
+          echo "$PWD/alire_bin/bin" >> $GITHUB_PATH
 
       - name: Create Inline Ada/SPARK Project
         run: |
           mkdir -p ada_demo/src
           
-          # Project file
           cat << 'EOF' > ada_demo/ada_demo.gpr
           project Ada_Demo is
              for Source_Dirs use ("src");
@@ -80,7 +30,6 @@ jobs:
           end Ada_Demo;
           EOF
 
-          # Package Spec with SPARK Contract
           cat << 'EOF' > ada_demo/src/math_ops.ads
           package Math_Ops with SPARK_Mode => On is
              subtype Bounded_Int is Integer range 0 .. 1000;
@@ -90,7 +39,6 @@ jobs:
           end Math_Ops;
           EOF
 
-          # Package Body
           cat << 'EOF' > ada_demo/src/math_ops.adb
           package body Math_Ops with SPARK_Mode => On is
              function Add (A, B : Bounded_Int) return Integer is
@@ -100,7 +48,6 @@ jobs:
           end Math_Ops;
           EOF
 
-          # Main File
           cat << 'EOF' > ada_demo/src/main.adb
           with Math_Ops;
           procedure Main is
@@ -110,7 +57,13 @@ jobs:
           end Main;
           EOF
 
+      - name: Provision GNAT & SPARK Toolchain
+        working-directory: ./ada_demo
+        run: |
+          alr --non-interactive toolchain --select gnatprove
+          alr --non-interactive toolchain --select gnat_native
+
       - name: Run SPARK Prover (GNATprove)
         working-directory: ./ada_demo
-        run: gnatprove -P ada_demo.gpr --level=1 --report=all
+        run: alr exec -- gnatprove -P ada_demo.gpr --level=1 --report=all
         
