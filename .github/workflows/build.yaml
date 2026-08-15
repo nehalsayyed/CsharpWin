@@ -1,4 +1,4 @@
-name: Build Legacy Android MVP Sample
+name: Build External Android MVP Sample
 
 on:
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
@@ -8,9 +8,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout the project repository
-      - name: Checkout Repository
+      # 1. Explicitly clone the specific external repository
+      - name: Clone Target Repository
         uses: actions/checkout@v4
+        with:
+          repository: 'amitshekhariitbhu/Android-MVP-Sample-Application'
+          ref: 'master'
 
       # 2. Set up Java 8 (Required for Gradle 4.1 & AGP 3.0.1)
       - name: Set up JDK 8
@@ -19,12 +22,12 @@ jobs:
           distribution: 'zulu'
           java-version: '8'
 
-      # 3. Patch root build.gradle to replace dead jcenter() with mavenCentral() & google()
+      # 3. Patch root build.gradle to replace dead jcenter() with google() & mavenCentral()
       - name: Patch Repositories in root build.gradle
         run: |
           sed -i 's/jcenter()/google()\n        mavenCentral()/g' build.gradle
 
-      # 4. Patch app/build.gradle to ensure Google and Maven Central resolution
+      # 4. Patch app/build.gradle to replace dead jcenter()
       - name: Patch Repositories in app build.gradle
         run: |
           if [ -f app/build.gradle ]; then
