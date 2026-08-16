@@ -7,11 +7,16 @@ jobs:
   build-android:
     name: Build
     runs-on: ubuntu-latest
-    container: rust:latest 
+    container: rust:latest
 
     steps:
-      
+        
 
       - name: Run
         run: |
-             cargo version
+            apt update -y
+            apt install git -y
+            git clone --recursive https://github.com/sxyazi/yazi.git
+            cd yazi 
+            cargo build --release
+             
