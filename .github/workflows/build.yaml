@@ -1,11 +1,11 @@
-name: Build Termux PRoot RE Environment
+name: Build Compact Termux PRoot RE Environment
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-arm64-rootfs:
-    name: Build ARM64 Ubuntu PRoot Image
+  build-arm64-alpine:
+    name: Build Alpine ARM64 Image
     runs-on: ubuntu-latest
 
     steps:
@@ -17,36 +17,31 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Create Custom Ubuntu Rootfs via Docker
+      - name: Create Custom Alpine Rootfs via Docker
         run: |
-          CONTAINER_ID=$(docker create --platform linux/arm64 ubuntu:24.04 bash -c "
-            export DEBIAN_FRONTEND=noninteractive
-            apt update && apt upgrade -y
+          CONTAINER_ID=$(docker create --platform linux/arm64 alpine:latest sh -c "
+            apk update && apk add --no-cache \
+              python3 py3-pip python3-dev build-base libffi-dev \
+              radare2 git wget curl unzip openjdk17-jre-headless \
+              apktool aapt zipalign apksigner adb \
+              zlib-dev capstone-dev libzip-dev lz4-dev
+
+            # Install Frida and Objection
+            pip3 install --break-system-packages --no-cache-dir frida-tools objection
             
-            # Install base tools, Python, Java, and Android SDK utilities
-            apt install -y \
-              python3 python3-pip python3-dev build-essential libffi-dev \
-              radare2 git wget curl unzip openjdk-17-jre-headless \
-              zlib1g-dev libcapstone-dev libzip-dev liblz4-dev \
-              apktool aapt zipalign apksigner adb
-            
-            # Install Frida and Objection via pip
-            pip3 install --break-system-packages frida-tools objection
-            
-            # Clean up apt caches to keep the rootfs size minimal
-            apt clean
-            rm -rf /var/lib/apt/lists/*
+            # Clear temporary caches
+            rm -rf /root/.cache /var/cache/apk/*
           ")
 
           docker start -a -i $CONTAINER_ID
 
           mkdir -p output
-          docker export $CONTAINER_ID | xz -9 -T0 > output/ubuntu-arm64-re.tar.xz
+          docker export $CONTAINER_ID | xz -9 -T0 > output/alpine-arm64-re.tar.xz
 
-      - name: Upload PRoot Image Artifact
+      - name: Upload Compact PRoot Image
         uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-arm64-re-rootfs
-          path: output/ubuntu-arm64-re.tar.xz
+          name: alpine-arm64-re-rootfs
+          path: output/alpine-arm64-re.tar.xz
           if-no-files-found: error
           
