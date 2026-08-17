@@ -4,22 +4,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build
+  build-mac:
+    name: Build on macOS
     runs-on: macos-latest
-    container: rust:latest
 
     steps:
-        
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Run
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Clone target repository
+        run: git clone --recursive https://github.com/andreabergia/rjvm.git
+
+      - name: Build and Run RJVM
         run: |
-            apt update -y
-            apt install git -y
-            git clone --recursive https://github.com/andreabergia/rjvm.git
-            cd rjvm
-            cargo run --release
-        
-             
-      
-    
+          cd rjvm
+          cargo run --release
