@@ -1,12 +1,12 @@
-name: Build
+name: Build Windows Executable
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-mac:
-    name: Build on macOS
-    runs-on: macos-latest
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
@@ -16,11 +16,21 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - name: Clone target repository
         run: git clone --recursive https://github.com/andreabergia/rjvm.git
 
-      - name: Build and Run RJVM
+      - name: Build standalone release binary
         run: |
           cd rjvm
-          cargo run --release
+          cargo build --release
+
+      - name: Upload Single Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rjvm-windows-x64
+          path: rjvm/target/release/rjvm.exe
+          if-no-files-found: error
+          
