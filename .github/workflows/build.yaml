@@ -7,7 +7,6 @@ jobs:
      runs-on: ubuntu-latest
      steps:
      - run: |
-           git clone https://github.com/Klairm/chip8.git
-           cd chip8
-           sudo apt install libsdl2-dev -y
-           make 
+           git clone https://github.com/QiZD90/chip-8.git
+           cd chip-8
+           gradle build
