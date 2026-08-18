@@ -10,4 +10,5 @@ jobs:
            git clone https://github.com/Klairm/chip8.git
            cd chip8
            chmod 777 install.sh
-           ./install.sh 2
+           ./install.sh 
+           2
