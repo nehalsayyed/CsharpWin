@@ -9,6 +9,5 @@ jobs:
      - run: |
            git clone https://github.com/Klairm/chip8.git
            cd chip8
-           chmod 777 install.sh
-           ./install.sh 
-           2
+           sudo apt install libsdl2-dev -y
+           make 
