@@ -7,6 +7,6 @@ jobs:
      runs-on: ubuntu-latest
      steps:
      - run: |
-           git clone https://github.com/QiZD90/chip-8.git
-           cd chip-8
+           git clone https://github.com/spring-projects/spring-petclinic.git
+           cd spring-petclinic
            gradle build
