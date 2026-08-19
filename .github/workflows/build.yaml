@@ -4,9 +4,26 @@ on: workflow_dispatch
 
 jobs:
   build:
-     runs-on: ubuntu-latest
-     steps:
-     - run: |
-           git clone https://github.com/hermit-os/kernel.git
-           cd kernel
-           cargo xtask build --arch x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Clone Spring Petclinic
+        run: |
+          git clone https://github.com/spring-projects/spring-petclinic.git
+          cd spring-petclinic
+          ./gradlew build
+
+      - name: Upload Standalone JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-petclinic-jar
+          path: spring-petclinic/build/libs/*.jar
+          
