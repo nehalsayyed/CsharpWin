@@ -7,6 +7,6 @@ jobs:
      runs-on: ubuntu-latest
      steps:
      - run: |
-           git clone https://github.com/spring-projects/spring-petclinic.git
-           cd spring-petclinic
-           gradle build
+           git clone https://github.com/hermit-os/kernel.git
+           cd kernel
+           cargo xtask build --arch x86_64
