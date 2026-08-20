@@ -16,13 +16,7 @@ jobs:
           sudo apt install neofetch -y
           neofetch
           lscpu
-          git clone https://github.com/electron/electron-quick-start
-          # Go into the repository
-          cd electron-quick-start
-          # Install dependencies
-          npm install
-          # Run the app
-          npm start
+          
 
 
           
