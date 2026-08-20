@@ -27,7 +27,7 @@ jobs:
       - name: Build Web Client (Frontend)
         run: |
           cd phoneinfoga/web/client
-          npm install
+          npm install --legacy-peer-deps
           npm run build
 
       - name: Build Standalone ARM64 Binary
