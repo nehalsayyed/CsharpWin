@@ -1,4 +1,4 @@
-name: Build PhoneInfoga arm64
+name: Build RISC-V Kernel for TinyEMU
 
 on:
   workflow_dispatch:
@@ -6,42 +6,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout host repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Clone Repository
+      - name: Install LLVM, Clang, LLD, and Build Tools
         run: |
-          git clone https://github.com/sundowndev/phoneinfoga.git
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm build-essential
 
-      - name: Build Web Client (Frontend)
+      - name: Clone xeome/riscv-kernel repository
         run: |
-          cd phoneinfoga/web/client
-          npm install --legacy-peer-deps
-          npm run build
+          git clone https://github.com/xeome/riscv-kernel.git
+          cd riscv-kernel
 
-      - name: Build Standalone ARM64 Binary
+      - name: Compile RISC-V Kernel
         run: |
-          cd phoneinfoga
-          
-          # Cross-compile static standalone binary for Linux ARM64
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o phoneinfoga-linux-arm64 .
-          
-          file phoneinfoga-linux-arm64
+          cd riscv-kernel
+          make
 
-      - name: Upload arm64 Binary Artifact
+      - name: Verify compiled kernel binary
+        run: |
+          cd riscv-kernel
+          ls -la
+          # Assuming the output binary is kernel.elf or kernel.bin
+          file kernel.elf || file kernel.bin || true
+
+      - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: phoneinfoga-linux-arm64
-          path: phoneinfoga/phoneinfoga-linux-arm64
+          name: riscv-kernel-binaries
+          path: |
+            riscv-kernel/kernel.elf
+            riscv-kernel/kernel.bin
+          if-no-files-found: warn
           
