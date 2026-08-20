@@ -9,21 +9,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
+      
       - name: Clone Spring Petclinic
         run: |
-          git clone https://github.com/spring-projects/spring-petclinic.git
-          cd spring-petclinic
-          ./gradlew build
+          # Clone this repository
+          sudo apt install neofetch -y
+          neofetch
+          lscpu
+          git clone https://github.com/electron/electron-quick-start
+          # Go into the repository
+          cd electron-quick-start
+          # Install dependencies
+          npm install
+          # Run the app
+          npm start
 
-      - name: Upload Standalone JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-petclinic-jar
-          path: spring-petclinic/build/libs/*.jar
+
           
+
+      
