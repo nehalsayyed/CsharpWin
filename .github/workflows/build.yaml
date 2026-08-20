@@ -15,15 +15,28 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Clone and Build PhoneInfoga Binary
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Clone Repository
         run: |
           git clone https://github.com/sundowndev/phoneinfoga.git
+
+      - name: Build Web Client (Frontend)
+        run: |
+          cd phoneinfoga/web/client
+          npm install
+          npm run build
+
+      - name: Build Standalone ARM64 Binary
+        run: |
           cd phoneinfoga
           
-          # Cross-compile static standalone binary for Linux ARM64 (proot-distro)
+          # Cross-compile static standalone binary for Linux ARM64
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o phoneinfoga-linux-arm64 .
           
-          # Verify the binary target architecture
           file phoneinfoga-linux-arm64
 
       - name: Upload arm64 Binary Artifact
