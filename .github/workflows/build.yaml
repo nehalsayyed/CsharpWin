@@ -1,4 +1,4 @@
-name: Build 
+name: Build J2ME-Loader APK
 
 on:
   workflow_dispatch:
@@ -8,12 +8,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout host repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install LLVM, Clang, LLD, and Build Tools
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Clone J2ME-Loader repository
         run: |
           git clone https://github.com/nikita36078/J2ME-Loader.git
           cd J2ME-Loader
-          chmod 777 gradlew 
-          ./gradlew assembleDebug 
+
+      - name: Create mock keystore & properties
+        run: |
+          cd J2ME-Loader
+
+          # Generate a self-signed dummy keystore
+          keytool -genkey -v -keystore release.jks \
+            -alias dummyAlias \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android,O=Android,C=US" \
+            -storepass dummyPass \
+            -keypass dummyPass
+
+          # Create keystore.properties in project root and app directory
+          cat <<EOF > keystore.properties
+          storeFile=../release.jks
+          storePassword=dummyPass
+          keyAlias=dummyAlias
+          keyPassword=dummyPass
+          EOF
+
+          cp keystore.properties app/keystore.properties
+
+      - name: Build Debug APK
+        run: |
+          cd J2ME-Loader
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: J2ME-Loader-Debug-APK
+          path: J2ME-Loader/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          
