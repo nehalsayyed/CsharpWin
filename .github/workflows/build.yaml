@@ -37,7 +37,7 @@ jobs:
             -storepass dummyPass \
             -keypass dummyPass
 
-          # Create keystore.properties in project root and app directory
+          # Create keystore.properties in both root and app directory
           cat <<EOF > keystore.properties
           storeFile=../release.jks
           storePassword=dummyPass
@@ -53,10 +53,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
+      - name: Locate Built APKs
+        run: |
+          echo "Searching for generated APK files:"
+          find . -name "*.apk"
+
       - name: Upload Installable APK
         uses: actions/upload-artifact@v4
         with:
           name: J2ME-Loader-Debug-APK
-          path: J2ME-Loader/app/build/outputs/apk/debug/*.apk
+          path: J2ME-Loader/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
           
