@@ -17,7 +17,7 @@ jobs:
 
             echo '=== Installing Dependencies ==='
             pkg update -y
-            pkg install -y git cmake ninja clang lld python python-pip numpy golang zlib libandroid-execinfo
+            pkg install -y git cmake ninja clang lld python python-pip python-numpy golang zlib libandroid-execinfo
 
             pip install build wheel setuptools
 
