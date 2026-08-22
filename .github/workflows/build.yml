@@ -11,5 +11,7 @@ jobs:
      steps:
        - name: Running
          run: |
-            uname -a
-            lscpu
+            pkg update -y
+            pkg upgrade -y
+            pkg i fastfetch -y
+            fastfetch
