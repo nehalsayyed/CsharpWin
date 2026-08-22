@@ -19,19 +19,9 @@ jobs:
           sudo apt-get install -y ninja-build cmake ccache
 
       - name: Set up Android NDK
-        uses: nspacestudio/setup-ndk@v1.0.0
+        uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26b
-
-      - name: Cache build directory
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.ccache
-            build
-          key: ${{ runner.os }}-termux-codon-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-termux-codon-
 
       - name: Configure CMake for Android ARM64
         run: |
@@ -51,12 +41,10 @@ jobs:
       - name: Package Artifacts
         run: |
           mkdir -p termux-package
-          # Copy compiled binaries and stdlib
           if [ -d "build/bin" ]; then cp -r build/bin/* termux-package/; fi
           if [ -f "build/codon" ]; then cp build/codon termux-package/; fi
           if [ -d "stdlib" ]; then cp -r stdlib termux-package/; fi
           
-          # Create a compressed tarball
           tar -czvf codon-termux-arm64.tar.gz -C termux-package .
 
       - name: Upload Build Artifact
