@@ -14,15 +14,25 @@ jobs:
           repository: exaloop/codon
           submodules: recursive
 
-      - name: Install System Dependencies & Ninja
+      - name: Install Build Tools & Native LLVM
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake ccache
+          sudo apt-get install -y ninja-build cmake ccache llvm-15-dev liblld-15-dev clang-15
 
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26b
+
+      - name: Cache Build Assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+          key: ${{ runner.os }}-termux-codon-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-termux-codon-
 
       - name: Configure CMake for Android ARM64
         run: |
@@ -33,18 +43,23 @@ jobs:
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR=/usr/lib/llvm-15/cmake \
+            -DCODON_PYTHON=OFF \
             -DBUILD_SHARED_LIBS=OFF
 
       - name: Build Codon Binary
         run: |
           cmake --build build --config Release --parallel $(nproc)
 
-      - name: Package Artifacts
+      - name: Package Termux Artifacts
         run: |
-          mkdir -p termux-package
-          if [ -d "build/bin" ]; then cp -r build/bin/* termux-package/; fi
-          if [ -f "build/codon" ]; then cp build/codon termux-package/; fi
-          if [ -d "stdlib" ]; then cp -r stdlib termux-package/; fi
+          mkdir -p termux-package/bin
+          mkdir -p termux-package/lib
+          
+          # Copy compiled binaries and standard libraries
+          find build/ -type f -executable -name "codon*" -exec cp {} termux-package/bin/ \; 2>/dev/null || true
+          if [ -d "stdlib" ]; then cp -r stdlib termux-package/lib/codon; fi
+          if [ -d "build/stdlib" ]; then cp -r build/stdlib termux-package/lib/codon; fi
           
           tar -czvf codon-termux-arm64.tar.gz -C termux-package .
 
