@@ -1,20 +1,17 @@
-name: Build Codon for Termux (Bionic libc)
+name: Fast Codon Build (Native ARM64 + Termux)
 
 on:
   workflow_dispatch:
 
 jobs:
   build-bionic:
-    runs-on: ubuntu-latest
+    # Uses native ARM64 hardware — bypasses QEMU completely!
+    runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Set up QEMU for ARM64 Emulation
-        uses: docker/setup-qemu-action@v3
-
-      - name: Build inside Termux Container (Bionic libc)
+      - name: Build directly inside Native Termux Environment
         run: |
           docker run --rm \
-            --platform linux/arm64 \
             --security-opt seccomp=unconfined \
             termux/termux-docker:aarch64 bash -c "
             set -e
@@ -47,16 +44,16 @@ jobs:
               -DCODON_PYTHON=OFF
             cmake --build build --config Release --parallel \$(nproc)
 
-            echo '=== Creating Package ==='
+            echo '=== Packaging ==='
             mkdir -p /tmp/dist/bin /tmp/dist/lib
             cp build/codon /tmp/dist/bin/
             if [ -d 'stdlib' ]; then cp -r stdlib /tmp/dist/lib/codon; fi
             tar -czvf /tmp/codon-termux-bionic.tar.gz -C /tmp/dist .
           "
 
-      - name: Extract Compiled Artifact
+      - name: Extract Compiled Binary
         run: |
-          CONTAINER_ID=$(docker create --platform linux/arm64 termux/termux-docker:aarch64)
+          CONTAINER_ID=$(docker create termux/termux-docker:aarch64)
           docker cp $CONTAINER_ID:/tmp/codon-termux-bionic.tar.gz ./codon-termux-bionic.tar.gz || true
 
       - name: Upload Artifact
