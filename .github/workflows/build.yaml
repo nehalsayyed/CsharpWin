@@ -17,9 +17,7 @@ jobs:
 
             echo '=== Updating & Installing Dependencies ==='
             pkg update -y
-            pkg install -y git cmake ninja clang lld zlib libgc python fastfetch
-
-            fastfetch
+            pkg install -y git cmake ninja clang lld zlib libgc python
 
             echo '=== Cloning Codon ==='
             git clone --recursive https://github.com/exaloop/codon.git
@@ -30,6 +28,9 @@ jobs:
             cmake -S llvm-project/llvm -B llvm-project/build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
               -DLLVM_INCLUDE_TESTS=OFF \
+              -DLLVM_BUILD_TESTS=OFF \
+              -DOPENMP_ENABLE_TESTS=OFF \
+              -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
               -DLLVM_ENABLE_RTTI=ON \
               -DLLVM_ENABLE_PROJECTS='openmp' \
               -DLLVM_TARGETS_TO_BUILD='AArch64'
