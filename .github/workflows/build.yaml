@@ -1,73 +1,57 @@
-name: Build Codon for Termux (aarch64-linux-android)
+name: Build Codon via QEMU ARM64
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-termux:
+  build-arm64:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Codon repository
-        uses: actions/checkout@v4
-        with:
-          repository: exaloop/codon
-          submodules: recursive
+      - name: Set up QEMU Emulation for ARM64
+        uses: docker/setup-qemu-action@v3
 
-      - name: Install Build Tools & Native LLVM
+      - name: Run Build inside Native ARM64 Container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build cmake ccache llvm-15-dev liblld-15-dev clang-15
+          docker run --rm --platform linux/arm64 ubuntu:22.04 bash -c "
+            set -e
+            apt-get update && apt-get install -y git cmake ninja-build clang lld gcc gfortran libgc-dev tar
 
-      - name: Set up Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r26b
+            echo '=== Cling Codon Source ==='
+            git clone --recursive https://github.com/exaloop/codon.git
+            cd codon
 
-      - name: Patch out Fortran/OpenBLAS dependency for Cross-Compilation
+            echo '=== Building Codon Custom LLVM ==='
+            git clone --depth 1 -b codon https://github.com/exaloop/llvm-project
+            cmake -S llvm-project/llvm -B llvm-project/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_INCLUDE_TESTS=OFF \
+              -DLLVM_ENABLE_RTTI=ON \
+              -DLLVM_ENABLE_PROJECTS='openmp' \
+              -DLLVM_TARGETS_TO_BUILD='AArch64'
+            cmake --build llvm-project/build --parallel \$(nproc)
+
+            echo '=== Building Codon ==='
+            export CODON_SYSTEM_LIBRARIES=/usr/lib/aarch64-linux-gnu
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_DIR=\$(pwd)/llvm-project/build/lib/cmake/llvm \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++ \
+              -DCODON_PYTHON=OFF
+            cmake --build build --config Release --parallel \$(nproc)
+
+            echo '=== Packaging Artifacts ==='
+            mkdir -p /tmp/dist/bin /tmp/dist/lib
+            cp build/codon /tmp/dist/bin/
+            if [ -d 'stdlib' ]; then cp -r stdlib /tmp/dist/lib/codon; fi
+            tar -czvf /tmp/codon-termux-arm64.tar.gz -C /tmp/dist .
+          "
+
+      - name: Extract Build Output
         run: |
-          # Remove or comment out Fortran language activation to prevent f95 errors
-          if [ -f "cmake/deps.cmake" ]; then
-            sed -i '/enable_language(Fortran)/d' cmake/deps.cmake
-          fi
-
-      - name: Cache Build Assets
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.ccache
-            build
-          key: ${{ runner.os }}-termux-codon-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-termux-codon-
-
-      - name: Configure CMake for Android ARM64
-        run: |
-          mkdir -p build
-          cmake -B build -S . \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-24 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_DIR=/usr/lib/llvm-15/cmake \
-            -DCODON_PYTHON=OFF \
-            -DBUILD_SHARED_LIBS=OFF
-
-      - name: Build Codon Binary
-        run: |
-          cmake --build build --config Release --parallel $(nproc)
-
-      - name: Package Termux Artifacts
-        run: |
-          mkdir -p termux-package/bin
-          mkdir -p termux-package/lib
-          
-          find build/ -type f -executable -name "codon*" -exec cp {} termux-package/bin/ \; 2>/dev/null || true
-          if [ -d "stdlib" ]; then cp -r stdlib termux-package/lib/codon; fi
-          if [ -d "build/stdlib" ]; then cp -r build/stdlib termux-package/lib/codon; fi
-          
-          tar -czvf codon-termux-arm64.tar.gz -C termux-package .
+          CONTAINER_ID=$(docker create --platform linux/arm64 ubuntu:22.04)
+          docker cp $CONTAINER_ID:/tmp/codon-termux-arm64.tar.gz ./codon-termux-arm64.tar.gz || true
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
