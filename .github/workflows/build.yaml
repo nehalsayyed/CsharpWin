@@ -13,15 +13,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Ninja and CMake
-        uses: jvm-repo-rebuild/setup-ninja@v1
+      - name: Install System Dependencies & Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake ccache
 
       - name: Set up Android NDK
-        uses: nsetup/setup-ndk@v1
+        uses: nspacestudio/setup-ndk@v1.0.0
         with:
           ndk-version: r26b
 
-      - name: Cache dependencies & build outputs
+      - name: Cache build directory
         uses: actions/cache@v4
         with:
           path: |
@@ -50,10 +52,11 @@ jobs:
         run: |
           mkdir -p termux-package
           # Copy compiled binaries and stdlib
-          cp -r build/codon termux-package/ 2>/dev/null || cp -r build/bin/* termux-package/ 2>/dev/null || true
+          if [ -d "build/bin" ]; then cp -r build/bin/* termux-package/; fi
+          if [ -f "build/codon" ]; then cp build/codon termux-package/; fi
           if [ -d "stdlib" ]; then cp -r stdlib termux-package/; fi
           
-          # Create a tarball
+          # Create a compressed tarball
           tar -czvf codon-termux-arm64.tar.gz -C termux-package .
 
       - name: Upload Build Artifact
