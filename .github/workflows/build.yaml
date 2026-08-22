@@ -1,27 +1,33 @@
-name: Build Codon via QEMU ARM64
+name: Build Codon for Termux (Bionic libc)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-arm64:
+  build-bionic:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up QEMU Emulation for ARM64
+      - name: Set up QEMU for ARM64 Emulation
         uses: docker/setup-qemu-action@v3
 
-      - name: Run Build inside Native ARM64 Container
+      - name: Build inside Termux Container (Bionic libc)
         run: |
-          docker run --rm --platform linux/arm64 ubuntu:22.04 bash -c "
+          docker run --rm \
+            --platform linux/arm64 \
+            --security-opt seccomp=unconfined \
+            termux/termux-docker:aarch64 bash -c "
             set -e
-            apt-get update && apt-get install -y git cmake ninja-build clang lld gcc gfortran libgc-dev tar
 
-            echo '=== Cling Codon Source ==='
+            echo '=== Updating Packages ==='
+            pkg update -y
+            pkg install -y git cmake ninja clang lld zlib libgc
+
+            echo '=== Cloning Codon ==='
             git clone --recursive https://github.com/exaloop/codon.git
             cd codon
 
-            echo '=== Building Codon Custom LLVM ==='
+            echo '=== Building Custom LLVM ==='
             git clone --depth 1 -b codon https://github.com/exaloop/llvm-project
             cmake -S llvm-project/llvm -B llvm-project/build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
@@ -31,8 +37,8 @@ jobs:
               -DLLVM_TARGETS_TO_BUILD='AArch64'
             cmake --build llvm-project/build --parallel \$(nproc)
 
-            echo '=== Building Codon ==='
-            export CODON_SYSTEM_LIBRARIES=/usr/lib/aarch64-linux-gnu
+            echo '=== Configuring Codon for Bionic ==='
+            export CODON_SYSTEM_LIBRARIES=\$PREFIX/lib
             cmake -S . -B build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
               -DLLVM_DIR=\$(pwd)/llvm-project/build/lib/cmake/llvm \
@@ -41,22 +47,22 @@ jobs:
               -DCODON_PYTHON=OFF
             cmake --build build --config Release --parallel \$(nproc)
 
-            echo '=== Packaging Artifacts ==='
+            echo '=== Creating Package ==='
             mkdir -p /tmp/dist/bin /tmp/dist/lib
             cp build/codon /tmp/dist/bin/
             if [ -d 'stdlib' ]; then cp -r stdlib /tmp/dist/lib/codon; fi
-            tar -czvf /tmp/codon-termux-arm64.tar.gz -C /tmp/dist .
+            tar -czvf /tmp/codon-termux-bionic.tar.gz -C /tmp/dist .
           "
 
-      - name: Extract Build Output
+      - name: Extract Compiled Artifact
         run: |
-          CONTAINER_ID=$(docker create --platform linux/arm64 ubuntu:22.04)
-          docker cp $CONTAINER_ID:/tmp/codon-termux-arm64.tar.gz ./codon-termux-arm64.tar.gz || true
+          CONTAINER_ID=$(docker create --platform linux/arm64 termux/termux-docker:aarch64)
+          docker cp $CONTAINER_ID:/tmp/codon-termux-bionic.tar.gz ./codon-termux-bionic.tar.gz || true
 
-      - name: Upload Build Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codon-termux-arm64
-          path: codon-termux-arm64.tar.gz
+          name: codon-termux-bionic-arm64
+          path: codon-termux-bionic.tar.gz
           retention-days: 14
           
