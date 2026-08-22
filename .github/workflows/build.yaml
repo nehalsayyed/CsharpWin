@@ -24,6 +24,13 @@ jobs:
         with:
           ndk-version: r26b
 
+      - name: Patch out Fortran/OpenBLAS dependency for Cross-Compilation
+        run: |
+          # Remove or comment out Fortran language activation to prevent f95 errors
+          if [ -f "cmake/deps.cmake" ]; then
+            sed -i '/enable_language(Fortran)/d' cmake/deps.cmake
+          fi
+
       - name: Cache Build Assets
         uses: actions/cache@v4
         with:
@@ -56,7 +63,6 @@ jobs:
           mkdir -p termux-package/bin
           mkdir -p termux-package/lib
           
-          # Copy compiled binaries and standard libraries
           find build/ -type f -executable -name "codon*" -exec cp {} termux-package/bin/ \; 2>/dev/null || true
           if [ -d "stdlib" ]; then cp -r stdlib termux-package/lib/codon; fi
           if [ -d "build/stdlib" ]; then cp -r build/stdlib termux-package/lib/codon; fi
