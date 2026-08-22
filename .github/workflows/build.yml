@@ -1,0 +1,15 @@
+name: Build
+
+on: workflow_dispatch
+
+jobs:
+  build:
+     runs-on: ubuntu-24.04-arm
+     container: termux/termux-docker:aarch64 
+
+
+     steps:
+       - name: Running
+         run: |
+            uname -a
+            lscpu
