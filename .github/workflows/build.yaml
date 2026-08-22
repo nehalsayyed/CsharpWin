@@ -1,25 +1,65 @@
-name: Build
+name: Build Codon for Termux (aarch64-linux-android)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-termux:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - uses: actions/checkout@v4
-      - name: Set up BEAM
-        uses: erlef/setup-beam@v1
         with:
-          otp-version: '27.0'
-          rebar3-version: '3.22.0'
-      - name: Run tests
+          submodules: recursive
+
+      - name: Set up Ninja and CMake
+        uses: jvm-repo-rebuild/setup-ninja@v1
+
+      - name: Set up Android NDK
+        uses: nsetup/setup-ndk@v1
+        with:
+          ndk-version: r26b
+
+      - name: Cache dependencies & build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+          key: ${{ runner.os }}-termux-codon-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-termux-codon-
+
+      - name: Configure CMake for Android ARM64
         run: |
-           git clone https://github.com/ninenines/cowboy.git
-           cd cowboy
-           rebar3 release 
-        
+          mkdir -p build
+          cmake -B build -S . \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF
+
+      - name: Build Codon Binary
+        run: |
+          cmake --build build --config Release --parallel $(nproc)
+
+      - name: Package Artifacts
+        run: |
+          mkdir -p termux-package
+          # Copy compiled binaries and stdlib
+          cp -r build/codon termux-package/ 2>/dev/null || cp -r build/bin/* termux-package/ 2>/dev/null || true
+          if [ -d "stdlib" ]; then cp -r stdlib termux-package/; fi
+          
+          # Create a tarball
+          tar -czvf codon-termux-arm64.tar.gz -C termux-package .
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codon-termux-arm64
+          path: codon-termux-arm64.tar.gz
+          retention-days: 14
+          
