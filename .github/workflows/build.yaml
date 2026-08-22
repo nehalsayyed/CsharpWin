@@ -1,4 +1,4 @@
-name: Build JAX for Termux (Bionic libc)
+name: Build JAX & jaxlib for Termux (Bionic libc)
 
 on:
   workflow_dispatch:
@@ -15,23 +15,26 @@ jobs:
             termux/termux-docker:aarch64 bash -c "
             set -e
 
-            echo '=== Installing Dependencies ==='
+            echo '=== Updating Packages & Enabling TUR ==='
             pkg update -y
-            pkg install -y git cmake ninja clang lld python python-pip python-numpy golang zlib libandroid-execinfo
+            pkg install -y tur-repo
+
+            echo '=== Installing Dependencies & Native Bazel ==='
+            pkg update -y
+            pkg install -y git cmake ninja clang lld python python-pip numpy bazel zlib libandroid-execinfo
 
             pip install build wheel setuptools
 
-            echo '=== Installing Bazelisk (Bionic Native) ==='
-            go install github.com/bazelbuild/bazelisk@latest
-            export PATH=\$HOME/go/bin:\$PATH
+            echo '=== Locating Installed Bazel ==='
+            BAZEL_BIN=$(which bazel || which bazel5 || which bazel7 || true)
+            echo \"Found Bazel at: $BAZEL_BIN\"
 
             echo '=== Cloning JAX ==='
             git clone --recursive https://github.com/jax-ml/jax.git
             cd jax
 
             echo '=== Building jaxlib Wheel ==='
-            # Point build.py to use native bazelisk instead of fetching glibc bazel
-            python build/build.py build --wheels=jaxlib --bazel_path=\$HOME/go/bin/bazelisk --verbose
+            python build/build.py build --wheels=jaxlib --bazel_path=$BAZEL_BIN --verbose
 
             echo '=== Building jax Wheel ==='
             python -m build --wheel --no-isolation
