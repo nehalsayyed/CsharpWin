@@ -4,14 +4,16 @@ on: workflow_dispatch
 
 jobs:
   build:
-     runs-on: ubuntu-24.04-arm
-     container: termux/termux-docker:aarch64 
+    runs-on: ubuntu-24.04-arm
 
-
-     steps:
-       - name: Running
-         run: |
+    steps:
+      - name: Running inside Termux Docker
+        run: |
+          docker run --rm termux/termux-docker:aarch64 bash -c "
+            set -e
             pkg update -y
             pkg upgrade -y
-            pkg i fastfetch -y
+            pkg install -y fastfetch
             fastfetch
+          "
+          
