@@ -1,21 +1,24 @@
-name: Build
+name: Kubernetes Example
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm
-
+  k8s-demo:
+    runs-on: ubuntu-latest
     steps:
-      - name: Running inside Termux Docker
+      - name: Create local Kubernetes cluster
+        uses: helm/kind-action@v1.8.0
+        with:
+          cluster_name: demo-cluster
+
+      - name: Deploy NGINX to Kubernetes
         run: |
-          docker run --rm termux/termux-docker:aarch64 bash -c "
-            set -e
-            pkg update -y
-            pkg upgrade -y
-            pkg install -y zig git
-            git clone https://github.com/kristoff-it/zine.git
-            cd zine 
-            zig build
-          "
+          kubectl create deployment nginx-demo --image=nginx:latest
+          kubectl expose deployment nginx-demo --port=80 --type=ClusterIP
+
+      - name: Verify Deployment
+        run: |
+          kubectl rollout status deployment/nginx-demo --timeout=60s
+          kubectl get pods,svc -o wide
           
