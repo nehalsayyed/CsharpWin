@@ -15,7 +15,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            termux/termux-docker:latest /bin/bash -c "
+            termux/termux-docker:latest /data/data/com.termux/files/usr/bin/sh -c "
               set -e
               pkg update -y && pkg upgrade -y
               
@@ -41,7 +41,7 @@ jobs:
               export CXX=clang++
               export PATH=\$PREFIX/bin:\$PATH
 
-              # Public clone without tokens
+              # Public clone
               git clone --depth 1 https://github.com/modular/modular.git modular
 
               # Fetch Bazel arm64 binary directly
