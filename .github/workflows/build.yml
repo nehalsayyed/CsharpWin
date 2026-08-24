@@ -15,17 +15,19 @@ jobs:
 
       - name: Clone Modular Monorepo on Host
         run: |
-          rm -rf modular
+          rm -rf modular dist
           git clone --depth 1 https://github.com/modular/modular.git modular
           mkdir -p dist
+          chmod -R 777 modular dist
 
       - name: Build inside Termux Docker
         run: |
-          docker run --rm \
+          docker run --rm --user root \
             -v ${{ github.workspace }}/modular:/modular \
             -v ${{ github.workspace }}/dist:/dist \
             termux/termux-docker:latest /data/data/com.termux/files/usr/bin/sh -c "
               set -e
+              
               pkg update -y && pkg upgrade -y
               
               pkg install -y \
@@ -46,39 +48,41 @@ jobs:
                 tar
 
               export PREFIX=/data/data/com.termux/files/usr
+              export PATH=\$PREFIX/bin:\$PATH
               export CC=clang
               export CXX=clang++
-              export PATH=\$PREFIX/bin:\$PATH
 
-              # Fetch Bazel arm64 binary into Termux environment
-              curl -LO https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
-              chmod +x bazel-7.1.0-linux-arm64
-              mv bazel-7.1.0-linux-arm64 \$PREFIX/bin/bazel
+              # Download and make Bazel executable directly
+              curl -sSL -o \$PREFIX/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
+              chmod +x \$PREFIX/bin/bazel
 
+              # Build execution inside cloned directory
               cd /modular
 
-              # Official Bazel build step for Mojo
-              if [ -f "BUILD.bazel" ]; then
-                bazel build --config=build-mojo //KGEN/... //mojo/... || true
+              if [ -f \"BUILD.bazel\" ]; then
+                \$PREFIX/bin/bazel build --config=opt //... || true
               fi
 
-              # Direct CMake build fallback
-              mkdir -p build && cd build
-              cmake .. \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX=\$PREFIX \
-                -DCMAKE_C_COMPILER=clang \
-                -DCMAKE_CXX_COMPILER=clang++ \
-                -DTERMUX=ON || true
+              if [ -f \"CMakeLists.txt\" ]; then
+                mkdir -p /modular/build
+                cd /modular/build
+                cmake -S /modular -B /modular/build \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DCMAKE_INSTALL_PREFIX=\$PREFIX \
+                  -DCMAKE_C_COMPILER=clang \
+                  -DCMAKE_CXX_COMPILER=clang++ \
+                  -DTERMUX=ON || true
 
-              ninja -j\$(nproc) || make -j\$(nproc) || true
+                ninja -j\$(nproc) || make -j\$(nproc) || true
+              fi
 
-              # Package generated binaries
+              # Packaging Output
               mkdir -p /dist/output
-              find /modular/bazel-bin /modular/build -type f -name "mojo" -exec cp -v {} /dist/output/mojo-termux-arm64 \; 2>/dev/null || true
-              find /modular/bazel-bin /modular/build -type f -name "kgen" -exec cp -v {} /dist/output/kgen-termux-arm64 \; 2>/dev/null || true
               
-              if [ -d "/modular/mojo/stdlib" ]; then
+              find /modular -type f -name \"mojo\" -exec cp -v {} /dist/output/mojo-termux-arm64 \; 2>/dev/null || true
+              find /modular -type f -name \"kgen\" -exec cp -v {} /dist/output/kgen-termux-arm64 \; 2>/dev/null || true
+
+              if [ -d \"/modular/mojo/stdlib\" ]; then
                 cp -r /modular/mojo/stdlib /dist/output/stdlib
               fi
 
