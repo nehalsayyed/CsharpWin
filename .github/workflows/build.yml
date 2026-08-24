@@ -1,90 +1,29 @@
-name: Build Ubuntu ARM64 Mojo Package
+name: Build Aider ARM64 Wheel
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
-    permissions:
-      contents: write
-
+    runs-on: ubuntu-24.04-arm  # Fast native ARM64 runner
     steps:
-      - name: Checkout Local Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Clone Modular Monorepo
-        run: |
-          rm -rf modular dist
-          git clone --depth 1 https://github.com/modular/modular.git modular
-          mkdir -p dist
-          chmod -R 777 modular dist
-
-      - name: Build inside Ubuntu ARM64 Container
-        run: |
-          docker run --rm --user root \
-            -v ${{ github.workspace }}/modular:/modular \
-            -v ${{ github.workspace }}/dist:/dist \
-            ubuntu:24.04 /bin/bash -c "
-              set -e
-              
-              apt-get update && apt-get install -y \
-                build-essential \
-                clang \
-                lld \
-                cmake \
-                ninja-build \
-                git \
-                python3 \
-                python3-pip \
-                openjdk-21-jdk-headless \
-                zlib1g-dev \
-                libffi-dev \
-                libxml2-dev \
-                libncurses-dev \
-                curl \
-                tar
-
-              export CC=clang
-              export CXX=clang++
-
-              # Download official Bazel ARM64 binary (works on glibc Ubuntu)
-              curl -sSL -o /usr/local/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
-              chmod +x /usr/local/bin/bazel
-
-              cd /modular
-
-              # Run Bazel build targets for Mojo/KGEN
-              bazel build --config=opt //... || true
-
-              # Create output directory structure
-              mkdir -p /dist/ubuntu-arm64-mojo
-              
-              # Find compiled executables from Bazel target output
-              find /modular/bazel-bin -type f -executable -exec cp -v {} /dist/ubuntu-arm64-mojo/ \; 2>/dev/null || true
-
-              # Copy Mojo standard library sources
-              if [ -d \"/modular/mojo/stdlib\" ]; then
-                cp -r /modular/mojo/stdlib /dist/ubuntu-arm64-mojo/stdlib
-              fi
-
-              # Archive build artifacts
-              cd /dist
-              tar -czvf mojo-ubuntu-arm64.tar.gz ubuntu-arm64-mojo/
-              sha256sum mojo-ubuntu-arm64.tar.gz > mojo-ubuntu-arm64.tar.gz.sha256
-            "
-
-      - name: Set Release Tag
-        id: vars
-        run: |
-          echo "tag=ubuntu-arm64-mojo-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-
-      - name: Create Release and Upload
-        uses: softprops/action-gh-release@v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: "Mojo PRoot Ubuntu ARM64 - ${{ steps.vars.outputs.tag }}"
-          files: |
-            dist/mojo-ubuntu-arm64.tar.gz
-            dist/mojo-ubuntu-arm64.tar.gz.sha256
-            
+          python-version: '3.11'  # 3.11 has full binary wheel compatibility
+
+      - name: Build Wheel bundle
+        run: |
+          python -m pip install --upgrade pip wheel
+          mkdir -p dist
+          pip wheel aider-chat -w dist/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aider-arm64-wheels
+          path: dist/*.whl
+          
