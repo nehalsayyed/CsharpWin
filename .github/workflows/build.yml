@@ -1,24 +1,99 @@
-name: Kubernetes Example
+name: Build Termux Mojo
 
 on:
   workflow_dispatch:
+  
 
 jobs:
-  k8s-demo:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+
     steps:
-      - name: Create local Kubernetes cluster
-        uses: helm/kind-action@v1.8.0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Fetch Modular Repo
+        run: |
+          git clone --depth 1 https://github.com/modularml/modular.git workspace/modular
+
+      - name: Build inside Termux Docker
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/workspace:/workspace \
+            -w /workspace \
+            termux/termux-docker:latest /bin/bash -c "
+              set -e
+              pkg update -y && pkg upgrade -y
+              
+              # Installed standard Termux packages (removed bazel)
+              pkg install -y \
+                build-essential \
+                clang \
+                lld \
+                cmake \
+                ninja \
+                git \
+                python \
+                openjdk-17 \
+                binutils \
+                zlib \
+                libffi \
+                libxml2 \
+                ncurses \
+                curl \
+                tar
+
+              export PREFIX=/data/data/com.termux/files/usr
+              export CC=clang
+              export CXX=clang++
+              export PATH=\$PREFIX/bin:\$PATH
+
+              # Fetch prebuilt Bazel binary for ARM64 Linux/Android
+              echo '==> Fetching Bazel binary'
+              curl -LO https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
+              chmod +x bazel-7.1.0-linux-arm64
+              mv bazel-7.1.0-linux-arm64 \$PREFIX/bin/bazel
+
+              cd /workspace/modular
+
+              # Attempt Bazel build first
+              if [ -f "BUILD.bazel" ]; then
+                bazel build --config=opt //mojo:mojo //KGEN:kgen || true
+              fi
+
+              # Fallback to CMake build
+              mkdir -p build && cd build
+              cmake .. \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=\$PREFIX \
+                -DCMAKE_C_COMPILER=clang \
+                -DCMAKE_CXX_COMPILER=clang++ \
+                -DTERMUX=ON
+
+              ninja -j\$(nproc) || make -j\$(nproc)
+
+              mkdir -p /workspace/dist
+              cp -v bin/mojo /workspace/dist/mojo-termux-arm64 || cp -v KGEN/kgen /workspace/dist/mojo-termux-arm64
+              cp -r -v ../mojo/stdlib /workspace/dist/stdlib || true
+
+              cd /workspace/dist
+              tar -czvf mojo-termux-aarch64.tar.gz mojo-termux-arm64 stdlib/
+              sha256sum mojo-termux-aarch64.tar.gz > mojo-termux-aarch64.tar.gz.sha256
+            "
+
+      - name: Set Release Tag
+        id: vars
+        run: |
+          echo "tag=termux-mojo-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Create Release and Upload
+        uses: softprops/action-gh-release@v1
         with:
-          cluster_name: demo-cluster
-
-      - name: Deploy NGINX to Kubernetes
-        run: |
-          kubectl create deployment nginx-demo --image=nginx:latest
-          kubectl expose deployment nginx-demo --port=80 --type=ClusterIP
-
-      - name: Verify Deployment
-        run: |
-          kubectl rollout status deployment/nginx-demo --timeout=60s
-          kubectl get pods,svc -o wide
-          
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: "Mojo Termux Native - ${{ steps.vars.outputs.tag }}"
+          files: |
+            workspace/dist/mojo-termux-aarch64.tar.gz
+            workspace/dist/mojo-termux-aarch64.tar.gz.sha256
+            
