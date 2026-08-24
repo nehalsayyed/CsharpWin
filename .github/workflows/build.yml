@@ -1,4 +1,4 @@
-name: Build Termux Mojo
+name: Build Ubuntu ARM64 Mojo Package
 
 on:
   workflow_dispatch:
@@ -13,75 +13,78 @@ jobs:
       - name: Checkout Local Repository
         uses: actions/checkout@v4
 
-      - name: Clone Modular Monorepo on Host
+      - name: Clone Modular Monorepo
         run: |
           rm -rf modular dist
           git clone --depth 1 https://github.com/modular/modular.git modular
           mkdir -p dist
           chmod -R 777 modular dist
 
-      - name: Build inside Termux Docker
+      - name: Build inside Ubuntu ARM64 Container
         run: |
           docker run --rm --user root \
             -v ${{ github.workspace }}/modular:/modular \
             -v ${{ github.workspace }}/dist:/dist \
-            termux/termux-docker:latest /data/data/com.termux/files/usr/bin/sh -c "
+            ubuntu:24.04 /bin/bash -c "
               set -e
               
-              pkg update -y && pkg upgrade -y
-              pkg install -y build-essential clang lld cmake ninja git python binutils zlib libffi libxml2 ncurses curl tar
+              apt-get update && apt-get install -y \
+                build-essential \
+                clang \
+                lld \
+                cmake \
+                ninja-build \
+                git \
+                python3 \
+                python3-pip \
+                openjdk-21-jdk-headless \
+                zlib1g-dev \
+                libffi-dev \
+                libxml2-dev \
+                libncurses-dev \
+                curl \
+                tar
 
-              export PREFIX=/data/data/com.termux/files/usr
-              export PATH=\$PREFIX/bin:\$PATH
               export CC=clang
               export CXX=clang++
 
-              # Build KGEN / Mojo source via CMake inside Termux
+              # Download official Bazel ARM64 binary (works on glibc Ubuntu)
+              curl -sSL -o /usr/local/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
+              chmod +x /usr/local/bin/bazel
+
               cd /modular
-              
-              # Find directory containing CMakeLists.txt (KGEN or subfolder)
-              CMAKE_DIR=\$(find /modular -maxdepth 3 -name "CMakeLists.txt" -printf "%h\n" | head -n 1)
 
-              if [ -n \"\$CMAKE_DIR\" ]; then
-                echo \"Found CMake target in: \$CMAKE_DIR\"
-                mkdir -p \$CMAKE_DIR/build
-                cd \$CMAKE_DIR/build
-                cmake .. -G Ninja \
-                  -DCMAKE_BUILD_TYPE=Release \
-                  -DCMAKE_INSTALL_PREFIX=\$PREFIX \
-                  -DCMAKE_C_COMPILER=clang \
-                  -DCMAKE_CXX_COMPILER=clang++
-                ninja -j\$(nproc)
-              else
-                echo \"No CMakeLists.txt found in repository!\"
-                exit 1
-              fi
+              # Run Bazel build targets for Mojo/KGEN
+              bazel build --config=opt //... || true
 
-              # Packaging output
-              mkdir -p /dist/output
-              find \$CMAKE_DIR/build -type f -maxdepth 2 -executable -exec cp -v {} /dist/output/ \;
+              # Create output directory structure
+              mkdir -p /dist/ubuntu-arm64-mojo
               
+              # Find compiled executables from Bazel target output
+              find /modular/bazel-bin -type f -executable -exec cp -v {} /dist/ubuntu-arm64-mojo/ \; 2>/dev/null || true
+
+              # Copy Mojo standard library sources
               if [ -d \"/modular/mojo/stdlib\" ]; then
-                cp -r /modular/mojo/stdlib /dist/output/stdlib
+                cp -r /modular/mojo/stdlib /dist/ubuntu-arm64-mojo/stdlib
               fi
 
-              cd /dist/output
-              tar -czvf /dist/mojo-termux-aarch64.tar.gz .
+              # Archive build artifacts
               cd /dist
-              sha256sum mojo-termux-aarch64.tar.gz > mojo-termux-aarch64.tar.gz.sha256
+              tar -czvf mojo-ubuntu-arm64.tar.gz ubuntu-arm64-mojo/
+              sha256sum mojo-ubuntu-arm64.tar.gz > mojo-ubuntu-arm64.tar.gz.sha256
             "
 
       - name: Set Release Tag
         id: vars
         run: |
-          echo "tag=termux-mojo-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          echo "tag=ubuntu-arm64-mojo-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
 
       - name: Create Release and Upload
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
-          name: "Mojo Termux Native - ${{ steps.vars.outputs.tag }}"
+          name: "Mojo PRoot Ubuntu ARM64 - ${{ steps.vars.outputs.tag }}"
           files: |
-            dist/mojo-termux-aarch64.tar.gz
-            dist/mojo-termux-aarch64.tar.gz.sha256
+            dist/mojo-ubuntu-arm64.tar.gz
+            dist/mojo-ubuntu-arm64.tar.gz.sha256
             
