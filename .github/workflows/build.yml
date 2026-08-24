@@ -29,80 +29,19 @@ jobs:
               set -e
               
               pkg update -y && pkg upgrade -y
-              
-              pkg install -y \
-                build-essential \
-                clang \
-                lld \
-                cmake \
-                ninja \
-                git \
-                python \
-                openjdk-17 \
-                binutils \
-                zlib \
-                libffi \
-                libxml2 \
-                ncurses \
-                curl \
-                tar
+              pkg install -y build-essential clang lld cmake ninja git python openjdk-17 binutils zlib libffi libxml2 ncurses curl tar
 
               export PREFIX=/data/data/com.termux/files/usr
               export PATH=\$PREFIX/bin:\$PATH
               export CC=clang
               export CXX=clang++
 
-              # Download and make Bazel executable directly
               curl -sSL -o \$PREFIX/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
               chmod +x \$PREFIX/bin/bazel
 
-              # Build execution inside cloned directory
               cd /modular
 
-              if [ -f \"BUILD.bazel\" ]; then
-                \$PREFIX/bin/bazel build --config=opt //... || true
-              fi
-
-              if [ -f \"CMakeLists.txt\" ]; then
-                mkdir -p /modular/build
-                cd /modular/build
-                cmake -S /modular -B /modular/build \
-                  -DCMAKE_BUILD_TYPE=Release \
-                  -DCMAKE_INSTALL_PREFIX=\$PREFIX \
-                  -DCMAKE_C_COMPILER=clang \
-                  -DCMAKE_CXX_COMPILER=clang++ \
-                  -DTERMUX=ON || true
-
-                ninja -j\$(nproc) || make -j\$(nproc) || true
-              fi
-
-              # Packaging Output
-              mkdir -p /dist/output
-              
-              find /modular -type f -name \"mojo\" -exec cp -v {} /dist/output/mojo-termux-arm64 \; 2>/dev/null || true
-              find /modular -type f -name \"kgen\" -exec cp -v {} /dist/output/kgen-termux-arm64 \; 2>/dev/null || true
-
-              if [ -d \"/modular/mojo/stdlib\" ]; then
-                cp -r /modular/mojo/stdlib /dist/output/stdlib
-              fi
-
-              cd /dist/output
-              tar -czvf /dist/mojo-termux-aarch64.tar.gz .
-              cd /dist
-              sha256sum mojo-termux-aarch64.tar.gz > mojo-termux-aarch64.tar.gz.sha256
+              # Fail explicitly if build fails so you can read the exact build log
+              bazel build --config=opt //KGEN:all
             "
-
-      - name: Set Release Tag
-        id: vars
-        run: |
-          echo "tag=termux-mojo-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-
-      - name: Create Release and Upload
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: "Mojo Termux Native - ${{ steps.vars.outputs.tag }}"
-          files: |
-            dist/mojo-termux-aarch64.tar.gz
-            dist/mojo-termux-aarch64.tar.gz.sha256
             
