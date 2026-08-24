@@ -2,7 +2,6 @@ name: Build Termux Mojo
 
 on:
   workflow_dispatch:
-  
 
 jobs:
   build:
@@ -11,23 +10,15 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Fetch Modular Repo
-        run: |
-          git clone --depth 1 https://github.com/modularml/modular.git workspace/modular
-
       - name: Build inside Termux Docker
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}/workspace:/workspace \
+            -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             termux/termux-docker:latest /bin/bash -c "
               set -e
               pkg update -y && pkg upgrade -y
               
-              # Installed standard Termux packages (removed bazel)
               pkg install -y \
                 build-essential \
                 clang \
@@ -50,20 +41,20 @@ jobs:
               export CXX=clang++
               export PATH=\$PREFIX/bin:\$PATH
 
-              # Fetch prebuilt Bazel binary for ARM64 Linux/Android
-              echo '==> Fetching Bazel binary'
+              # Public clone without tokens
+              git clone --depth 1 https://github.com/modular/modular.git modular
+
+              # Fetch Bazel arm64 binary directly
               curl -LO https://github.com/bazelbuild/bazel/releases/download/7.1.0/bazel-7.1.0-linux-arm64
               chmod +x bazel-7.1.0-linux-arm64
               mv bazel-7.1.0-linux-arm64 \$PREFIX/bin/bazel
 
-              cd /workspace/modular
+              cd modular
 
-              # Attempt Bazel build first
               if [ -f "BUILD.bazel" ]; then
                 bazel build --config=opt //mojo:mojo //KGEN:kgen || true
               fi
 
-              # Fallback to CMake build
               mkdir -p build && cd build
               cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
@@ -94,6 +85,6 @@ jobs:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: "Mojo Termux Native - ${{ steps.vars.outputs.tag }}"
           files: |
-            workspace/dist/mojo-termux-aarch64.tar.gz
-            workspace/dist/mojo-termux-aarch64.tar.gz.sha256
+            dist/mojo-termux-aarch64.tar.gz
+            dist/mojo-termux-aarch64.tar.gz.sha256
             
