@@ -29,8 +29,10 @@ jobs:
           sudo mount -t sysfs /sys ./rootfs/sys
           sudo mount --bind /dev ./rootfs/dev
 
-          # Execute all setup tasks in chroot
-          sudo chroot ./rootfs /bin/bash -c "
+          # Execute in chroot with clean environment (prevents host JAVA_HOME leakage)
+          sudo env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            chroot ./rootfs /bin/bash -c "
+            set -e
             export DEBIAN_FRONTEND=noninteractive
             apt update -y
             apt install -y --no-install-recommends \
@@ -42,35 +44,42 @@ jobs:
               ca-certificates \
               curl
 
-            # 1. Download and setup Android Command Line Tools
-            mkdir -p /opt/android-sdk/cmdline-tools
-            cd /opt/android-sdk/cmdline-tools
+            # Determine Java path accurately
+            JAVA_PATH=\$(readlink -f /usr/bin/java | sed 's:/bin/java::')
+            export JAVA_HOME=\$JAVA_PATH
+            export ANDROID_HOME=/opt/android-sdk
+
+            # 1. Download Command Line Tools into temp folder
+            mkdir -p /opt/android-sdk/temp-tools
+            cd /opt/android-sdk/temp-tools
             wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
             unzip -q commandlinetools-linux-*.zip
-            mv cmdline-tools latest
-            rm commandlinetools-linux-*.zip
+            
+            # 2. Re-structure correctly to /opt/android-sdk/cmdline-tools/latest
+            mkdir -p /opt/android-sdk/cmdline-tools/latest
+            mv cmdline-tools/* /opt/android-sdk/cmdline-tools/latest/
+            cd /opt/android-sdk
+            rm -rf temp-tools
 
-            # 2. Export Environment Variables
-            export ANDROID_HOME=/opt/android-sdk
+            # Update PATH for sdkmanager execution
             export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools
 
             # 3. Accept Licenses & Install Platforms + Build-Tools
             yes | sdkmanager --licenses
             sdkmanager 'platform-tools' 'platforms;android-34' 'build-tools;34.0.0'
 
-            # 4. Remove Google's x86/incompatible AAPT2 and link native ARM64 version
+            # 4. Remove Google's x86 AAPT2 and link native ARM64 version
             rm -f /opt/android-sdk/build-tools/34.0.0/aapt2
-            ln -s /usr/bin/aapt2 /opt/android-sdk/build-tools/34.0.0/aapt2
+            ln -sf /usr/bin/aapt2 /opt/android-sdk/build-tools/34.0.0/aapt2
 
-            # 5. Save global system paths for PRoot logins
-            echo 'export ANDROID_HOME=/opt/android-sdk' >> /root/.bashrc
-            echo 'export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/build-tools/34.0.0' >> /root/.bashrc
-            echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64' >> /root/.bashrc
+            # 5. Persist Environment Variables for PRoot Logins
+            echo \"export ANDROID_HOME=/opt/android-sdk\" >> /root/.bashrc
+            echo \"export JAVA_HOME=\$JAVA_PATH\" >> /root/.bashrc
+            echo \"export PATH=\\\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/build-tools/34.0.0:\$JAVA_PATH/bin\" >> /root/.bashrc
 
-            # 6. Strip bloat and clear apt caches to minimize file size
+            # 6. Clean unused SDK components & apt cache
             rm -rf /opt/android-sdk/emulator
             rm -rf /opt/android-sdk/system-images
-            rm -rf /opt/android-sdk/licenses
             apt clean
             rm -rf /var/lib/apt/lists/*
           "
@@ -90,4 +99,3 @@ jobs:
         with:
           name: termux-compose-rootfs
           path: termux-compose-rootfs.tar.xz
-          
