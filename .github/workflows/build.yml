@@ -35,7 +35,7 @@ jobs:
                 mesa \
                 openal-soft \
                 libcurl \
-                ladspa && \
+                ladspa-sdk && \
 
               # Clone JUCE
               git clone --depth 1 https://github.com/juce-framework/JUCE.git && \
