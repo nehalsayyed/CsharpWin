@@ -1,67 +1,93 @@
-name: Build Termux Native JUCE
+name: Build Compose Termux Rootfs
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm  # Native ARM64 runner
+  build-rootfs:
+    runs-on: ubuntu-24.04-arm  # Fast native ARM64 runner
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build JUCE inside Docker Hub Termux Container
+      - name: Install Host Dependencies
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            termux/termux-docker:aarch64 \
-            sh -c "
-              pkg update -y && \
-              pkg install -y \
-                clang \
-                cmake \
-                ninja \
-                git \
-                make \
-                freetype \
-                fontconfig \
-                libx11 \
-                libxext \
-                libxrandr \
-                libxcursor \
-                libxrender \
-                libxi \
-                mesa \
-                openal-soft \
-                libcurl \
-                ladspa-sdk && \
+          sudo apt update -y
+          sudo apt install -y debootstrap qemu-user-static xz-utils wget unzip
 
-              # Clone JUCE
-              git clone --depth 1 https://github.com/juce-framework/JUCE.git && \
+      - name: Bootstrap Minimal Debian ARM64 Rootfs
+        run: |
+          sudo debootstrap --arch=arm64 bookworm ./rootfs http://deb.debian.org/debian
 
-              # Build and install core JUCE (Headers & CMake modules)
-              cmake -B JUCE/build -S JUCE -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DJUCE_BUILD_EXAMPLES=ON \
-                -DCMAKE_INSTALL_PREFIX=/workspace/juce_installed && \
-              cmake --build JUCE/build --target install --parallel \$(nproc) && \
+      - name: Configure Rootfs & Set Up Android SDK + Native AAPT2
+        run: |
+          # Setup DNS resolution inside chroot
+          sudo cp /etc/resolv.conf ./rootfs/etc/resolv.conf
 
-              # Build JUCE Example Binaries
-              cmake -B JUCE/examples/build -S JUCE/examples -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release && \
-              cmake --build JUCE/examples/build --parallel \$(nproc)
-            "
+          # Mount pseudo-filesystems
+          sudo mount -t proc /proc ./rootfs/proc
+          sudo mount -t sysfs /sys ./rootfs/sys
+          sudo mount --bind /dev ./rootfs/dev
 
-      - name: Upload Binaries Artifact
+          # Execute all setup tasks in chroot
+          sudo chroot ./rootfs /bin/bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt update -y
+            apt install -y --no-install-recommends \
+              openjdk-17-jdk-headless \
+              aapt \
+              wget \
+              unzip \
+              git \
+              ca-certificates \
+              curl
+
+            # 1. Download and setup Android Command Line Tools
+            mkdir -p /opt/android-sdk/cmdline-tools
+            cd /opt/android-sdk/cmdline-tools
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q commandlinetools-linux-*.zip
+            mv cmdline-tools latest
+            rm commandlinetools-linux-*.zip
+
+            # 2. Export Environment Variables
+            export ANDROID_HOME=/opt/android-sdk
+            export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools
+
+            # 3. Accept Licenses & Install Platforms + Build-Tools
+            yes | sdkmanager --licenses
+            sdkmanager 'platform-tools' 'platforms;android-34' 'build-tools;34.0.0'
+
+            # 4. Remove Google's x86/incompatible AAPT2 and link native ARM64 version
+            rm -f /opt/android-sdk/build-tools/34.0.0/aapt2
+            ln -s /usr/bin/aapt2 /opt/android-sdk/build-tools/34.0.0/aapt2
+
+            # 5. Save global system paths for PRoot logins
+            echo 'export ANDROID_HOME=/opt/android-sdk' >> /root/.bashrc
+            echo 'export PATH=\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools:\$ANDROID_HOME/build-tools/34.0.0' >> /root/.bashrc
+            echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64' >> /root/.bashrc
+
+            # 6. Strip bloat and clear apt caches to minimize file size
+            rm -rf /opt/android-sdk/emulator
+            rm -rf /opt/android-sdk/system-images
+            rm -rf /opt/android-sdk/licenses
+            apt clean
+            rm -rf /var/lib/apt/lists/*
+          "
+
+          # Unmount pseudo-filesystems safely
+          sudo umount -lf ./rootfs/proc || true
+          sudo umount -lf ./rootfs/sys || true
+          sudo umount -lf ./rootfs/dev || true
+
+      - name: Package Rootfs Tarball
+        run: |
+          cd rootfs
+          sudo tar -cJpf ../termux-compose-rootfs.tar.xz .
+
+      - name: Upload Rootfs Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: juce-termux-binaries
-          path: JUCE/examples/build/
-
-      - name: Upload Header Libraries & CMake Modules Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: juce-termux-installed-headers
-          path: juce_installed/
+          name: termux-compose-rootfs
+          path: termux-compose-rootfs.tar.xz
           
