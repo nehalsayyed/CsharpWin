@@ -28,6 +28,13 @@ jobs:
           cd build
           cmake ..
           make -j $(nproc)
+          cd ..
+          cd examples
+          mkdir build
+          cd build
+          cmake ..
+          make -j $(nproc)
+          
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
