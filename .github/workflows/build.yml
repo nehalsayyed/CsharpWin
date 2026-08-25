@@ -29,10 +29,13 @@ jobs:
                 libx11 \
                 libxext \
                 libxrandr \
-                libxinerama \
                 libxcursor \
+                libxrender \
+                libxi \
                 mesa \
-                openal-soft && \
+                openal-soft \
+                libcurl \
+                ladspa && \
 
               # Clone JUCE
               git clone --depth 1 https://github.com/juce-framework/JUCE.git && \
@@ -40,6 +43,7 @@ jobs:
               # Build and install core JUCE (Headers & CMake modules)
               cmake -B JUCE/build -S JUCE -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
+                -DJUCE_BUILD_EXAMPLES=ON \
                 -DCMAKE_INSTALL_PREFIX=/workspace/juce_installed && \
               cmake --build JUCE/build --target install --parallel \$(nproc) && \
 
