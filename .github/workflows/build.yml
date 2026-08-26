@@ -1,61 +1,28 @@
-name: Build React Native ARM64 APK
+name: Generate Blank Expo Zip Artifact
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  generate-zip:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Create App in Temp Directory and Build
+      - name: Create Blank Expo App
         run: |
-          set -e
-          
-          # 1. Create a isolated temp directory outside GITHUB_WORKSPACE
-          BUILD_DIR=$(mktemp -d)
-          cd $BUILD_DIR
+          TEMP_DIR=$(mktemp -d)
+          npx --yes create-expo-app@latest $TEMP_DIR/my-app --template blank --no-install
+          cd $TEMP_DIR/my-app
+          zip -r $GITHUB_WORKSPACE/expo-project.zip .
 
-          # 2. Initialize a fresh React Native CLI app cleanly
-          npx --yes @react-native-community/cli@latest init CsharpWin --skip-install --pm npm
-          cd CsharpWin
-
-          # 3. Add Vision Camera dependency cleanly
-          npm install react-native-vision-camera@^4.0.0 --save
-
-          # 4. Safely set arm64 architecture without breaking existing boolean properties
-          if grep -q "^reactNativeArchitectures=" android/gradle.properties; then
-            sed -i 's/^reactNativeArchitectures=.*/reactNativeArchitectures=arm64-v8a/' android/gradle.properties
-          else
-            printf "\nreactNativeArchitectures=arm64-v8a\n" >> android/gradle.properties
-          fi
-
-          # 5. Build small ARM64 Release APK
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
-
-          # 6. Copy output APK back to runner workspace
-          mkdir -p $GITHUB_WORKSPACE/output
-          cp app/build/outputs/apk/release/*.apk $GITHUB_WORKSPACE/output/app-arm64-v8a-release.apk
-
-      - name: Upload Small ARM64 APK Artifact
+      - name: Upload Project Zip Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: react-native-arm64-apk
-          path: output/app-arm64-v8a-release.apk
+          name: expo-project
+          path: expo-project.zip
           
