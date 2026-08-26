@@ -1,4 +1,4 @@
-name: Build Expo Camera Filter APK
+name: Build React Native ARM64 APK
 
 on:
   workflow_dispatch:
@@ -15,7 +15,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -23,163 +22,35 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Inject Project package.json
+      - name: Create App in Temp Directory and Build
         run: |
-          cat << 'EOF' > package.json
-          {
-            "name": "expo-camera-filter",
-            "version": "1.0.0",
-            "main": "index.js",
-            "scripts": {
-              "start": "expo start",
-              "android": "expo start --android"
-            },
-            "dependencies": {
-              "expo": "~51.0.0",
-              "expo-camera": "~15.0.0",
-              "expo-status-bar": "~1.12.1",
-              "react": "18.2.0",
-              "react-native": "0.74.5"
-            },
-            "devDependencies": {
-              "@babel/core": "^7.20.0"
-            },
-            "private": true
-          }
-          EOF
+          # 1. Create temporary directory outside the runner root
+          TEMP_DIR=$(mktemp -d)
+          cd $TEMP_DIR
 
-      - name: Inject Expo app.json Config (Automatic Permissions)
-        run: |
-          cat << 'EOF' > app.json
-          {
-            "expo": {
-              "name": "Expo Camera Filter",
-              "slug": "expo-camera-filter",
-              "version": "1.0.0",
-              "orientation": "portrait",
-              "userInterfaceStyle": "dark",
-              "ios": {
-                "supportsTablet": true
-              },
-              "android": {
-                "package": "com.anonymous.expocamerafilter"
-              },
-              "plugins": [
-                [
-                  "expo-camera",
-                  {
-                    "cameraPermission": "Allow app to access camera to apply filters."
-                  }
-                ]
-              ]
-            }
-          }
-          EOF
+          # 2. Initialize fresh React Native app with no interactive prompts
+          npx --yes @react-native-community/cli@latest init CsharpWin --skip-install --pm npm
 
-      - name: Inject App Entry Point (App.js)
-        run: |
-          cat << 'EOF' > App.js
-          import React, { useState } from 'react';
-          import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-          import { CameraView, useCameraPermissions } from 'expo-camera';
+          cd CsharpWin
 
-          export default function App() {
-            const [permission, requestPermission] = useCameraPermissions();
-            const [filterOverlay, setFilterOverlay] = useState('transparent');
+          # 3. Add Vision Camera dependency cleanly
+          npm install react-native-vision-camera@^4.0.0 --save
 
-            if (!permission) {
-              return <View style={styles.container} />;
-            }
+          # 4. Restrict build target strictly to arm64-v8a architecture to optimize size
+          echo "reactNativeArchitectures=arm64-v8a" >> android/gradle.properties
 
-            if (!permission.granted) {
-              return (
-                <View style={styles.container}>
-                  <Text style={{ color: '#fff', marginBottom: 20 }}>Camera permission is required</Text>
-                  <TouchableOpacity style={styles.button} onPress={requestPermission}>
-                    <Text style={styles.btnText}>Grant Permission</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            }
-
-            return (
-              <View style={styles.container}>
-                <CameraView style={StyleSheet.absoluteFillObject} facing="back">
-                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: filterOverlay }]} pointerEvents="none" />
-                </CameraView>
-                
-                <View style={styles.controls}>
-                  <TouchableOpacity 
-                    style={[styles.filterBtn, filterOverlay === 'transparent' && styles.activeBtn]} 
-                    onPress={() => setFilterOverlay('transparent')}>
-                    <Text style={styles.btnText}>Normal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.filterBtn, filterOverlay === 'rgba(112, 66, 20, 0.4)' && styles.activeBtn]} 
-                    onPress={() => setFilterOverlay('rgba(112, 66, 20, 0.4)')}>
-                    <Text style={styles.btnText}>Sepia</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.filterBtn, filterOverlay === 'rgba(0, 0, 150, 0.3)' && styles.activeBtn]} 
-                    onPress={() => setFilterOverlay('rgba(0, 0, 150, 0.3)')}>
-                    <Text style={styles.btnText}>Cool</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.filterBtn, filterOverlay === 'rgba(255, 0, 0, 0.25)' && styles.activeBtn]} 
-                    onPress={() => setFilterOverlay('rgba(255, 0, 0, 0.25)')}>
-                    <Text style={styles.btnText}>Warm</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          }
-
-          const styles = StyleSheet.create({
-            container: {
-              flex: 1,
-              backgroundColor: '#000',
-              justifyContent: 'center',
-              alignItems: 'center',
-            },
-            controls: {
-              position: 'absolute',
-              bottom: 40,
-              flexDirection: 'row',
-              backgroundColor: 'rgba(0,0,0,0.6)',
-              borderRadius: 20,
-              padding: 10,
-            },
-            filterBtn: {
-              paddingVertical: 8,
-              paddingHorizontal: 14,
-              borderRadius: 12,
-              marginHorizontal: 4,
-              backgroundColor: '#333',
-            },
-            activeBtn: {
-              backgroundColor: '#007AFF',
-            },
-            btnText: {
-              color: '#FFF',
-              fontWeight: 'bold',
-            },
-          });
-          EOF
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Generate Native Android Project (Expo Prebuild)
-        run: npx expo prebuild --platform android
-
-      - name: Build ARM64 APK via Gradle
-        run: |
+          # 5. Build small ARM64 Release APK
           cd android
-          ./gradlew assembleRelease -Pandroid.injected.build.abi=arm64-v8a
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+          # 6. Copy output APK back to runner workspace for artifact upload
+          mkdir -p $GITHUB_WORKSPACE/output
+          cp app/build/outputs/apk/release/*.apk $GITHUB_WORKSPACE/output/app-arm64-v8a-release.apk
 
       - name: Upload Small ARM64 APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: react-native-expo-arm64-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: react-native-arm64-apk
+          path: output/app-arm64-v8a-release.apk
           
