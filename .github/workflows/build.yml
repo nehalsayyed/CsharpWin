@@ -24,27 +24,32 @@ jobs:
 
       - name: Create App in Temp Directory and Build
         run: |
-          # 1. Create temporary directory outside the runner root
-          TEMP_DIR=$(mktemp -d)
-          cd $TEMP_DIR
+          set -e
+          
+          # 1. Create a isolated temp directory outside GITHUB_WORKSPACE
+          BUILD_DIR=$(mktemp -d)
+          cd $BUILD_DIR
 
-          # 2. Initialize fresh React Native app with no interactive prompts
+          # 2. Initialize a fresh React Native CLI app cleanly
           npx --yes @react-native-community/cli@latest init CsharpWin --skip-install --pm npm
-
           cd CsharpWin
 
           # 3. Add Vision Camera dependency cleanly
           npm install react-native-vision-camera@^4.0.0 --save
 
-          # 4. Restrict build target strictly to arm64-v8a architecture to optimize size
-          echo "reactNativeArchitectures=arm64-v8a" >> android/gradle.properties
+          # 4. Safely set arm64 architecture without breaking existing boolean properties
+          if grep -q "^reactNativeArchitectures=" android/gradle.properties; then
+            sed -i 's/^reactNativeArchitectures=.*/reactNativeArchitectures=arm64-v8a/' android/gradle.properties
+          else
+            printf "\nreactNativeArchitectures=arm64-v8a\n" >> android/gradle.properties
+          fi
 
           # 5. Build small ARM64 Release APK
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
-          # 6. Copy output APK back to runner workspace for artifact upload
+          # 6. Copy output APK back to runner workspace
           mkdir -p $GITHUB_WORKSPACE/output
           cp app/build/outputs/apk/release/*.apk $GITHUB_WORKSPACE/output/app-arm64-v8a-release.apk
 
