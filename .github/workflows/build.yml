@@ -9,13 +9,11 @@ jobs:
     runs-on: ubuntu-24.04-arm # Native ARM64 GitHub Runner
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Install Build Toolchain & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            git \
             build-essential \
             gcc \
             ocaml \
@@ -24,19 +22,26 @@ jobs:
             menhir \
             libmenhir-ocaml-dev
 
+      - name: Manually Clone CompCert Repository
+        run: |
+          git clone https://github.com/AbsInt/CompCert.git compcert_src
+          
       - name: Configure CompCert
         run: |
+          cd compcert_src
           # Target 64-bit ARM Linux (matches Termux proot-distro aarch64)
-          ./configure arm64-linux -clightgen
+          ./configure aarch64-linux -clightgen
 
       - name: Build CompCert
         run: |
+          cd compcert_src
           make -j$(nproc)
 
-      - name: Package Binaries
+      - name: Package Binaries for Termux
         run: |
-          # Package executables, internal libraries, and headers
-          tar -czvf compcert-ubuntu-arm64.tar.gz ccomp clightgen runtime/ lib/ share/
+          cd compcert_src
+          # Create compressed tarball of binaries, libraries, and runtime headers
+          tar -czvf ../compcert-ubuntu-arm64.tar.gz ccomp clightgen runtime/ lib/ share/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
