@@ -22,26 +22,30 @@ jobs:
             menhir \
             libmenhir-ocaml-dev
 
-      - name: Manually Clone CompCert Repository
+      - name: Clone CompCert Repository
         run: |
           git clone https://github.com/AbsInt/CompCert.git compcert_src
-          
+
       - name: Configure CompCert
         run: |
           cd compcert_src
-          # Target 64-bit ARM Linux (matches Termux proot-distro aarch64)
-          ./configure aarch64-linux -clightgen
+          ./configure aarch64-linux -prefix /usr/local -clightgen
 
-      - name: Build CompCert
+      - name: Compile CompCert
         run: |
           cd compcert_src
           make -j$(nproc)
 
-      - name: Package Binaries for Termux
+      - name: Stage & Package Installed Files
         run: |
           cd compcert_src
-          # Create compressed tarball of binaries, libraries, and runtime headers
-          tar -czvf ../compcert-ubuntu-arm64.tar.gz ccomp clightgen runtime/ lib/ share/
+          # Create a staging directory and install CompCert into it
+          mkdir -p ../dist/usr/local
+          make install DESTDIR=$(pwd)/../dist
+
+          # Package the installed binaries, headers, and share configuration
+          cd ../dist/usr/local
+          tar -czvf ../../../compcert-ubuntu-arm64.tar.gz bin/ share/ lib/compcert/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
