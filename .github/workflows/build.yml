@@ -6,51 +6,13 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm # Native ARM64 GitHub Runner
+    runs-on: ubuntu-latest # Native ARM64 GitHub Runner
 
     steps:
+      - name: Flutter action
+        uses: subosito/flutter-action@v2.23.0
       - name: Install Build Toolchain & Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            build-essential \
-            gcc \
-            ocaml \
-            ocaml-findlib \
-            coq \
-            menhir \
-            libmenhir-ocaml-dev
-
-      - name: Clone CompCert Repository
-        run: |
-          git clone https://github.com/AbsInt/CompCert.git compcert_src
-
-      - name: Configure CompCert
-        run: |
-          cd compcert_src
-          ./configure aarch64-linux -prefix /usr/local -clightgen
-
-      - name: Compile CompCert
-        run: |
-          cd compcert_src
-          make -j$(nproc)
-
-      - name: Stage & Package Installed Files
-        run: |
-          cd compcert_src
-          # Create a staging directory and install CompCert into it
-          mkdir -p ../dist/usr/local
-          make install DESTDIR=$(pwd)/../dist
-
-          # Package the installed binaries, headers, and share configuration
-          cd ../dist/usr/local
-          tar -czvf ../../../compcert-ubuntu-arm64.tar.gz bin/ share/ lib/compcert/
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: compcert-ubuntu-arm64
-          path: compcert-ubuntu-arm64.tar.gz
-          retention-days: 7
+            flutter doctor 
+            flutter --version 
           
