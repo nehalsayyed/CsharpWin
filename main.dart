@@ -35,15 +35,13 @@ class _ActionChipExampleState extends State<ActionChipExample> {
     return Scaffold(
       appBar: AppBar(title: const Text('ActionChip Sample')),
       body: Center(
-        child: ActionChip(
-          avatar: Icon(favorite ? Icons.favorite : Icons.favorite_border),
-          label: const Text('Save to favorites'),
-          onPressed: () {
-            setState(() {
-              favorite = !favorite;
-            });
-          },
-        ),
+        child: ElevatedButton(
+  onPressed: () {
+    print('Elevated Button Clicked!');
+  },
+  child: const Text('Submit'),
+)
+
       ),
     );
   }
