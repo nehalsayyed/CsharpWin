@@ -6,7 +6,6 @@ on:
 
 jobs:
   build:
-    # Use native ARM64 runner (No QEMU needed!)
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -17,17 +16,25 @@ jobs:
         run: |
           set -e
 
-          # Install host tools
+          # Install host dependencies
           sudo apt-get update
-          sudo apt-get install -y tar xz-utils wget
+          sudo apt-get install -y tar xz-utils curl jq
 
           ROOTFS_DIR="$(pwd)/alpine-rootfs"
           mkdir -p "$ROOTFS_DIR"
 
-          echo "==> Fetching Alpine Linux ARM64 Mini RootFS..."
-          wget -q https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/alpine-minirotfs-3.20.0-aarch64.tar.gz
-          tar -xzf alpine-minirotfs-3.20.0-aarch64.tar.gz -C "$ROOTFS_DIR"
-          rm alpine-minirotfs-3.20.0-aarch64.tar.gz
+          echo "==> Fetching Latest Alpine Linux 3.20 ARM64 Mini RootFS..."
+          ALPINE_URL=$(curl -s https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/ | grep -oE 'alpine-minirotfs-3\.20\.[0-9]+-aarch64\.tar\.gz' | head -n 1)
+          
+          if [ -z "$ALPINE_URL" ]; then
+            echo "Failed to resolve Alpine rootfs version dynamically, falling back to static 3.20 release mirror..."
+            ALPINE_URL="alpine-minirotfs-3.20.3-aarch64.tar.gz"
+          fi
+
+          echo "Downloading: $ALPINE_URL"
+          curl -sSL "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/$ALPINE_URL" -o alpine-rootfs.tar.gz
+          tar -xzf alpine-rootfs.tar.gz -C "$ROOTFS_DIR"
+          rm alpine-rootfs.tar.gz
 
           echo "==> Setting up Chroot mounts..."
           sudo mount --bind /dev "$ROOTFS_DIR/dev"
@@ -47,15 +54,16 @@ jobs:
               bash curl git unzip xz libstdc++ gcompat \
               openjdk17-jdk ca-certificates shadow sudo
 
+            # Fix glibc shared library paths for Dart/Flutter engine execution on Alpine
             mkdir -p /lib64
-            ln -s /lib/libc.so.6 /lib64/ld-linux-aarch64.so.1 || true
+            ln -sf /lib/libc.musl-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 || true
 
-            # Install Flutter SDK
+            # Install Flutter SDK into /opt
             mkdir -p /opt
             cd /opt
             curl -sSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
 
-            # Setup Android SDK
+            # Setup Android SDK structure
             export ANDROID_SDK_ROOT=/opt/android-sdk
             mkdir -p \$ANDROID_SDK_ROOT/cmdline-tools
             cd \$ANDROID_SDK_ROOT/cmdline-tools
@@ -64,7 +72,7 @@ jobs:
             mv cmdline-tools latest
             rm cmdline.zip
 
-            # Environment profile
+            # Global Environment Profile configuration
             cat << 'EOF' > /etc/profile.d/flutter.sh
             export PATH=\"/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:\$PATH\"
             export ANDROID_SDK_ROOT=\"/opt/android-sdk\"
@@ -74,27 +82,29 @@ jobs:
             EOF
             chmod +x /etc/profile.d/flutter.sh
 
-            # Create developer user
+            # Create developer non-root user
             useradd -m -s /bin/bash developer
             echo 'developer ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
             chown -R developer:developer /opt/flutter /opt/android-sdk
 
-            # Pre-download dependencies natively (Fast!)
+            # Pre-download Android SDK platforms & Flutter artifacts inside runner
             git config --global --add safe.directory /opt/flutter
             su - developer -s /bin/bash -c \"
               source /etc/profile.d/flutter.sh
 
+              # Accept licenses & download build dependencies
               yes | sdkmanager --sdk_root=\$ANDROID_SDK_ROOT \
                 'platform-tools' \
                 'platforms;android-34' \
                 'build-tools;34.0.0'
 
+              # Precache Flutter Android engine dependencies
               flutter config --no-analytics
               flutter config --android-sdk \$ANDROID_SDK_ROOT
               flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
             \"
 
-            # Cleanup
+            # Cleanup caches to preserve target size
             rm -rf /var/cache/apk/*
             rm -rf /tmp/* /var/tmp/*
             rm -rf /opt/flutter/bin/cache/downloads/*
@@ -108,20 +118,11 @@ jobs:
           sudo umount "$ROOTFS_DIR/sys"
 
           echo "==> Compressing into high-ratio tarball..."
-          XZ_OPT=-9 sudo tar --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' \
+          XZ_OPT="-8e -T0" sudo tar --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' \
             -cJf "offline-flutter-apk-arm64.tar.xz" -C "$ROOTFS_DIR" .
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: offline-flutter-apk-arm64.tar.xz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifact
+      - name: Upload RootFS Artifact
         uses: actions/upload-artifact@v4
-        if: "!startsWith(github.ref, 'refs/tags/')"
         with:
           name: offline-flutter-apk-arm64
           path: offline-flutter-apk-arm64.tar.xz
