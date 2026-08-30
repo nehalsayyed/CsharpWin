@@ -1,7 +1,8 @@
-name: Build Fully-Offline Flutter APK Tooling (Native ARM64)
+name: Build Fully-Offline Flutter APK Toolchain (Native ARM64)
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   build:
@@ -11,12 +12,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Install System Dependencies & x86_64 Emulation
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git
+          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git qemu-user-static binfmt-support
+          sudo update-binfmts --enable
 
-      - name: Install Flutter & Android SDK
+      - name: Download & Install Flutter and Android SDK
         run: |
           set -e
           sudo mkdir -p /opt/flutter /opt/android-sdk
@@ -25,23 +27,24 @@ jobs:
           echo "==> Cloning Flutter SDK..."
           git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/flutter
 
-          echo "==> Downloading Android Command-line Tools..."
+          echo "==> Downloading Android Command-Line Tools..."
           mkdir -p /opt/android-sdk/cmdline-tools
           cd /opt/android-sdk/cmdline-tools
-          curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip || \
-          curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" -o cmdline.zip
+          
+          # Verified official Google Android Command-Line Tools package
+          curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o cmdline.zip
           unzip -q cmdline.zip
           mv cmdline-tools latest
           rm cmdline.zip
 
-      - name: Pre-cache All Offline Engine & Android Dependencies
+      - name: Accept Licenses & Pre-cache All Offline Engine & Android Dependencies
         run: |
           set -e
           export PATH="/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:$PATH"
           export ANDROID_SDK_ROOT="/opt/android-sdk"
           export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
 
-          echo "==> Accepting Android SDK Licenses & Installing Tools..."
+          echo "==> Installing Android SDK packages via sdkmanager..."
           yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
             "platform-tools" \
             "platforms;android-34" \
@@ -52,18 +55,18 @@ jobs:
           flutter config --android-sdk $ANDROID_SDK_ROOT
           flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
 
-          echo "==> Creating dummy project to force offline Gradle cache warm-up..."
+          echo "==> Building dummy Flutter app to force full offline Gradle cache download..."
           mkdir -p /tmp/dummy_app
           cd /tmp/dummy_app
           flutter create --template=app .
           flutter build apk --debug
+          cd /
           rm -rf /tmp/dummy_app
 
-      - name: Compress Environment into Offline Archive
+      - name: Compress Environment into High-Ratio Offline Archive
         run: |
           set -e
           echo "==> Packaging SDKs and Gradle cache..."
-          # Creates clean tarball containing Flutter, Android SDK, and local Gradle cached dependencies
           XZ_OPT="-8e -T0" tar -cJf offline-flutter-apk-arm64.tar.xz /opt/flutter /opt/android-sdk ~/.gradle
 
       - name: Upload RootFS/Toolchain Artifact
