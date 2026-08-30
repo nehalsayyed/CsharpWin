@@ -18,25 +18,13 @@ jobs:
 
           # Install host dependencies
           sudo apt-get update
-          sudo apt-get install -y tar xz-utils curl jq
+          sudo apt-get install -y tar xz-utils curl
 
           ROOTFS_DIR="$(pwd)/alpine-rootfs"
           mkdir -p "$ROOTFS_DIR"
 
-          echo "==> Fetching Latest Alpine Linux ARM64 Mini RootFS..."
-          # Fetch the filename directly from the latest-stable directory
-          ALPINE_FILENAME=$(curl -sSLf https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/ | grep -oE 'alpine-minirotfs-[0-9]+\.[0-9]+\.[0-9]+-aarch64\.tar\.gz' | head -n 1)
-
-          if [ -z "$ALPINE_FILENAME" ]; then
-            echo "Error: Could not resolve latest Alpine mini-rootfs tarball filename!"
-            exit 1
-          fi
-
-          DOWNLOAD_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/$ALPINE_FILENAME"
-          echo "Downloading from verified URL: $DOWNLOAD_URL"
-
-          # -f stops curl from creating a fake file if the server returns 404
-          curl -sSLf "$DOWNLOAD_URL" -o alpine-rootfs.tar.gz
+          echo "==> Downloading Alpine Linux 3.24.1 ARM64 Mini RootFS..."
+          curl -sSLf "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.1-aarch64.tar.gz" -o alpine-rootfs.tar.gz
 
           echo "==> Extracting Alpine RootFS..."
           tar -xzf alpine-rootfs.tar.gz -C "$ROOTFS_DIR"
@@ -52,10 +40,9 @@ jobs:
           sudo chroot "$ROOTFS_DIR" /bin/sh -c "
             set -e
 
-            # Enable community repo for required packages
-            ALPINE_VER=\$(cat /etc/alpine-release | cut -d. -f1,2)
-            echo \"https://dl-cdn.alpinelinux.org/alpine/v\${ALPINE_VER}/main\" > /etc/apk/repositories
-            echo \"https://dl-cdn.alpinelinux.org/alpine/v\${ALPINE_VER}/community\" >> /etc/apk/repositories
+            # Enable main and community repositories for Alpine 3.24
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' > /etc/apk/repositories
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' >> /etc/apk/repositories
 
             apk update
             apk add --no-cache \
