@@ -15,7 +15,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
             curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
-            android create --name Nehal
+            android create --name Nehal -o Nehal
             cd Nehal
             ./gradlew assembleDebug 
 
