@@ -1,8 +1,7 @@
-name: Build 600MB Fully-Offline Flutter APK RootFS (Native ARM64)
+name: Build Fully-Offline Flutter APK Tooling (Native ARM64)
 
 on:
   workflow_dispatch:
-  push:
 
 jobs:
   build:
@@ -12,104 +11,65 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build RootFS inside Alpine Container
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git
+
+      - name: Install Flutter & Android SDK
         run: |
           set -e
+          sudo mkdir -p /opt/flutter /opt/android-sdk
+          sudo chown -R $USER:$USER /opt/flutter /opt/android-sdk
 
-          BUILD_DIR="$(pwd)/build_rootfs"
-          mkdir -p "$BUILD_DIR"
+          echo "==> Cloning Flutter SDK..."
+          git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/flutter
 
-          docker run --rm \
-            --platform linux/arm64 \
-            -v "$BUILD_DIR:/export" \
-            alpine:3.24 /bin/sh -c '
-            set -e
+          echo "==> Downloading Android Command-line Tools..."
+          mkdir -p /opt/android-sdk/cmdline-tools
+          cd /opt/android-sdk/cmdline-tools
+          curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip || \
+          curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" -o cmdline.zip
+          unzip -q cmdline.zip
+          mv cmdline-tools latest
+          rm cmdline.zip
 
-            echo "==> Updating Alpine Repositories..."
-            echo "https://dl-cdn.alpinelinux.org/alpine/v3.24/main" > /etc/apk/repositories
-            echo "https://dl-cdn.alpinelinux.org/alpine/v3.24/community" >> /etc/apk/repositories
+      - name: Pre-cache All Offline Engine & Android Dependencies
+        run: |
+          set -e
+          export PATH="/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:$PATH"
+          export ANDROID_SDK_ROOT="/opt/android-sdk"
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
 
-            apk update
-            apk add --no-cache \
-              bash curl git unzip xz libstdc++ gcompat \
-              openjdk17-jdk ca-certificates shadow sudo
+          echo "==> Accepting Android SDK Licenses & Installing Tools..."
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
-            # Fix glibc paths for Dart runtime on musl
-            mkdir -p /lib64
-            ln -sf /lib/libc.musl-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 || true
+          echo "==> Precaching Flutter Engine Artifacts..."
+          flutter config --no-analytics
+          flutter config --android-sdk $ANDROID_SDK_ROOT
+          flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
 
-            echo "==> Fetching Flutter SDK..."
-            mkdir -p /opt
-            git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/flutter
+          echo "==> Creating dummy project to force offline Gradle cache warm-up..."
+          mkdir -p /tmp/dummy_app
+          cd /tmp/dummy_app
+          flutter create --template=app .
+          flutter build apk --debug
+          rm -rf /tmp/dummy_app
 
-            echo "==> Downloading Android Command-Line Tools..."
-            export ANDROID_SDK_ROOT=/opt/android-sdk
-            mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-            cd $ANDROID_SDK_ROOT/cmdline-tools
-            curl -sSLf https://dl.google.com/android/repository/commandlinetools-linux-12700392_latest.zip -o cmdline.zip
-            unzip -q cmdline.zip
-            mv cmdline-tools latest
-            rm cmdline.zip
+      - name: Compress Environment into Offline Archive
+        run: |
+          set -e
+          echo "==> Packaging SDKs and Gradle cache..."
+          # Creates clean tarball containing Flutter, Android SDK, and local Gradle cached dependencies
+          XZ_OPT="-8e -T0" tar -cJf offline-flutter-apk-arm64.tar.xz /opt/flutter /opt/android-sdk ~/.gradle
 
-            # Write system environment variables
-            cat << "EOF" > /etc/profile.d/flutter.sh
-export PATH="/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:$PATH"
-export ANDROID_SDK_ROOT="/opt/android-sdk"
-export ANDROID_HOME="/opt/android-sdk"
-export JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
-export LANG="C.UTF-8"
-EOF
-            chmod +x /etc/profile.d/flutter.sh
-
-            # Create developer non-root user
-            useradd -m -s /bin/bash developer
-            echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-            chown -R developer:developer /opt/flutter /opt/android-sdk
-
-            git config --global --add safe.directory /opt/flutter
-
-            # Write an isolated execution script to prevent shell string truncation
-            cat << "EOF" > /setup.sh
-#!/bin/bash
-set -e
-source /etc/profile.d/flutter.sh
-
-echo "==> Accepting Android SDK Licenses & Installing Packages..."
-yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
-  "platform-tools" \
-  "platforms;android-34" \
-  "build-tools;34.0.0"
-
-echo "==> Downloading Flutter Engine & Artifacts..."
-flutter config --no-analytics
-flutter config --android-sdk $ANDROID_SDK_ROOT
-flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
-EOF
-            chmod +x /setup.sh
-
-            # Execute full setup as developer user
-            su - developer -c "/setup.sh"
-            rm /setup.sh
-
-            # Cleanup temporary build files
-            rm -rf /var/cache/apk/*
-            rm -rf /tmp/* /var/tmp/*
-            rm -rf /opt/flutter/bin/cache/downloads/*
-            rm -rf /opt/flutter/docs /opt/flutter/examples
-            rm -rf /root/.cache /home/developer/.cache
-
-            echo "==> Exporting File Structure..."
-            cp -rp /bin /etc /home /lib /lib64 /media /mnt /opt /root /run /sbin /srv /usr /var /export/
-            mkdir -p /export/dev /export/proc /export/sys /export/tmp
-            '
-
-          echo "==> Compressing offline rootfs..."
-          sudo apt-get update && sudo apt-get install -y xz-utils
-          XZ_OPT="-8e -T0" sudo tar -cJf "offline-flutter-apk-arm64.tar.xz" -C "$BUILD_DIR" .
-
-      - name: Upload RootFS Artifact
+      - name: Upload RootFS/Toolchain Artifact
         uses: actions/upload-artifact@v4
         with:
           name: offline-flutter-apk-arm64
           path: offline-flutter-apk-arm64.tar.xz
+          retention-days: 7
           
