@@ -12,10 +12,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Enable Multi-Arch Support & x86_64 Emulation
         run: |
+          sudo dpkg --add-architecture amd64
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git
+          sudo apt-get install -y \
+            openjdk-17-jdk unzip xz-utils curl git \
+            qemu-user-static binfmt-support libc6:amd64 libstdc++6:amd64
 
       - name: Download & Install Flutter and Android SDK
         run: |
@@ -29,7 +32,6 @@ jobs:
           echo "==> Downloading Android Command-Line Tools..."
           mkdir -p /opt/android-sdk/cmdline-tools
           cd /opt/android-sdk/cmdline-tools
-          
           curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o cmdline.zip
           unzip -q cmdline.zip
           mv cmdline-tools latest
@@ -53,17 +55,23 @@ jobs:
           flutter config --android-sdk $ANDROID_SDK_ROOT
           flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
 
+          echo "==> Fetching Native Linux-ARM64 AAPT2 Binary from Google Maven..."
+          mkdir -p /opt/android-sdk/aapt2-arm64
+          curl -sSLf "https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2/8.2.2-10154469/aapt2-8.2.2-10154469-linux-arm64.jar" -o /opt/android-sdk/aapt2-arm64/aapt2.zip
+          unzip -q /opt/android-sdk/aapt2-arm64/aapt2.zip -d /opt/android-sdk/aapt2-arm64/
+          chmod +x /opt/android-sdk/aapt2-arm64/aapt2
+
           echo "==> Creating dummy Flutter app..."
           mkdir -p /tmp/dummy_app
           cd /tmp/dummy_app
           flutter create --template=app .
 
-          echo "==> Forcing Native ARM64 AAPT2 via Gradle properties..."
+          echo "==> Overriding Gradle AAPT2 with Native ARM64 Binary..."
           cat << 'EOF' >> android/gradle.properties
-          android.aapt2FromMavenOverride=/opt/android-sdk/build-tools/34.0.0/aapt2
+          android.aapt2FromMavenOverride=/opt/android-sdk/aapt2-arm64/aapt2
           EOF
 
-          echo "==> Pre-building APK to warm up offline cache..."
+          echo "==> Building APK to warm up offline cache..."
           flutter build apk --debug
           cd /
           rm -rf /tmp/dummy_app
