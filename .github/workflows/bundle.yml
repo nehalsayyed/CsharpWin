@@ -12,11 +12,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies & x86_64 Emulation
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git qemu-user-static binfmt-support
-          sudo update-binfmts --enable
+          sudo apt-get install -y openjdk-17-jdk unzip xz-utils curl git
 
       - name: Download & Install Flutter and Android SDK
         run: |
@@ -31,7 +30,6 @@ jobs:
           mkdir -p /opt/android-sdk/cmdline-tools
           cd /opt/android-sdk/cmdline-tools
           
-          # Verified official Google Android Command-Line Tools package
           curl -sSLf "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o cmdline.zip
           unzip -q cmdline.zip
           mv cmdline-tools latest
@@ -55,10 +53,17 @@ jobs:
           flutter config --android-sdk $ANDROID_SDK_ROOT
           flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
 
-          echo "==> Building dummy Flutter app to force full offline Gradle cache download..."
+          echo "==> Creating dummy Flutter app..."
           mkdir -p /tmp/dummy_app
           cd /tmp/dummy_app
           flutter create --template=app .
+
+          echo "==> Forcing Native ARM64 AAPT2 via Gradle properties..."
+          cat << 'EOF' >> android/gradle.properties
+          android.aapt2FromMavenOverride=/opt/android-sdk/build-tools/34.0.0/aapt2
+          EOF
+
+          echo "==> Pre-building APK to warm up offline cache..."
           flutter build apk --debug
           cd /
           rm -rf /tmp/dummy_app
