@@ -15,5 +15,15 @@ jobs:
       - name: Install Build Dependencies
         run: |
             curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
-            android update
+            android create --name Nehal
+            cd Nehal
+            ./gradlew assembleDebug 
+
+      - name: Upload 
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapp
+          path: ~Nehal/app/build/output/apk/debug/app-debug*
+          
+
           
