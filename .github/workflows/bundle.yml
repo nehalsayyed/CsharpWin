@@ -2,7 +2,7 @@ name: Build 600MB Fully-Offline Flutter APK RootFS (Native ARM64)
 
 on:
   workflow_dispatch:
-  
+  push:
 
 jobs:
   build:
@@ -18,19 +18,18 @@ jobs:
 
           # Create work directory on runner
           BUILD_DIR="$(pwd)/build_rootfs"
-          ROOTFS_OUT="$(pwd)/rootfs_export"
-          mkdir -p "$BUILD_DIR" "$ROOTFS_OUT"
+          mkdir -p "$BUILD_DIR"
 
-          # Execute full environment preparation inside an isolated Docker Alpine container
+          # Execute full environment preparation inside an isolated Docker Alpine 3.24 container
           docker run --rm \
             --platform linux/arm64 \
             -v "$BUILD_DIR:/export" \
-            arm64v8/alpine:3.20 /bin/sh -c "
+            alpine:3.24 /bin/sh -c "
             set -e
 
             echo '==> Updating Alpine Repositories...'
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/main' > /etc/apk/repositories
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/community' >> /etc/apk/repositories
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' > /etc/apk/repositories
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' >> /etc/apk/repositories
 
             apk update
             apk add --no-cache \
@@ -41,13 +40,12 @@ jobs:
             mkdir -p /lib64
             ln -sf /lib/libc.musl-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 || true
 
-            # Install Flutter SDK into /opt
-            echo '==> Downloading Flutter SDK...'
+            # Clone Flutter SDK directly via git to guarantee no 404 archive errors
+            echo '==> Fetching Flutter SDK via Git...'
             mkdir -p /opt
-            cd /opt
-            curl -sSLf https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
+            git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/flutter
 
-            # Setup Android SDK structure
+            # Setup Android SDK structure using valid Google URL
             echo '==> Downloading Android Command-Line Tools...'
             export ANDROID_SDK_ROOT=/opt/android-sdk
             mkdir -p \$ANDROID_SDK_ROOT/cmdline-tools
@@ -72,7 +70,7 @@ jobs:
             echo 'developer ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
             chown -R developer:developer /opt/flutter /opt/android-sdk
 
-            # Pre-download Android SDK platforms & Flutter artifacts inside runner
+            # Pre-download Android SDK platforms & Flutter engine artifacts
             git config --global --add safe.directory /opt/flutter
             su - developer -s /bin/bash -c \"
               source /etc/profile.d/flutter.sh
@@ -89,7 +87,7 @@ jobs:
               flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
             \"
 
-            # Cleanup build bloat
+            # Cleanup build cache
             rm -rf /var/cache/apk/*
             rm -rf /tmp/* /var/tmp/*
             rm -rf /opt/flutter/bin/cache/downloads/*
