@@ -23,16 +23,22 @@ jobs:
           ROOTFS_DIR="$(pwd)/alpine-rootfs"
           mkdir -p "$ROOTFS_DIR"
 
-          echo "==> Fetching Latest Alpine Linux 3.20 ARM64 Mini RootFS..."
-          ALPINE_URL=$(curl -s https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/ | grep -oE 'alpine-minirotfs-3\.20\.[0-9]+-aarch64\.tar\.gz' | head -n 1)
-          
-          if [ -z "$ALPINE_URL" ]; then
-            echo "Failed to resolve Alpine rootfs version dynamically, falling back to static 3.20 release mirror..."
-            ALPINE_URL="alpine-minirotfs-3.20.3-aarch64.tar.gz"
+          echo "==> Fetching Latest Alpine Linux ARM64 Mini RootFS..."
+          # Fetch the filename directly from the latest-stable directory
+          ALPINE_FILENAME=$(curl -sSLf https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/ | grep -oE 'alpine-minirotfs-[0-9]+\.[0-9]+\.[0-9]+-aarch64\.tar\.gz' | head -n 1)
+
+          if [ -z "$ALPINE_FILENAME" ]; then
+            echo "Error: Could not resolve latest Alpine mini-rootfs tarball filename!"
+            exit 1
           fi
 
-          echo "Downloading: $ALPINE_URL"
-          curl -sSL "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/$ALPINE_URL" -o alpine-rootfs.tar.gz
+          DOWNLOAD_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/$ALPINE_FILENAME"
+          echo "Downloading from verified URL: $DOWNLOAD_URL"
+
+          # -f stops curl from creating a fake file if the server returns 404
+          curl -sSLf "$DOWNLOAD_URL" -o alpine-rootfs.tar.gz
+
+          echo "==> Extracting Alpine RootFS..."
           tar -xzf alpine-rootfs.tar.gz -C "$ROOTFS_DIR"
           rm alpine-rootfs.tar.gz
 
@@ -46,8 +52,10 @@ jobs:
           sudo chroot "$ROOTFS_DIR" /bin/sh -c "
             set -e
 
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/main' > /etc/apk/repositories
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/community' >> /etc/apk/repositories
+            # Enable community repo for required packages
+            ALPINE_VER=\$(cat /etc/alpine-release | cut -d. -f1,2)
+            echo \"https://dl-cdn.alpinelinux.org/alpine/v\${ALPINE_VER}/main\" > /etc/apk/repositories
+            echo \"https://dl-cdn.alpinelinux.org/alpine/v\${ALPINE_VER}/community\" >> /etc/apk/repositories
 
             apk update
             apk add --no-cache \
@@ -61,13 +69,13 @@ jobs:
             # Install Flutter SDK into /opt
             mkdir -p /opt
             cd /opt
-            curl -sSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
+            curl -sSLf https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
 
             # Setup Android SDK structure
             export ANDROID_SDK_ROOT=/opt/android-sdk
             mkdir -p \$ANDROID_SDK_ROOT/cmdline-tools
             cd \$ANDROID_SDK_ROOT/cmdline-tools
-            curl -sSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
+            curl -sSLf https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
             unzip -q cmdline.zip
             mv cmdline-tools latest
             rm cmdline.zip
