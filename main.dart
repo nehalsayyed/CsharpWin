@@ -1,449 +1,477 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-import 'package:cpu_info_plus/cpu_info_plus.dart';
+import 'package:material_charts/material_charts.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final _plugin = CpuInfoPlus();
-
-  bool _loading = true;
-  String? _error;
-  FullCpuInfo? _report;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final report = await _plugin.getCpuInfoReport();
-      if (!mounted) return;
-      setState(() {
-        _report = report;
-        _loading = false;
-      });
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message ?? e.code;
-        _loading = false;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Cpu Info Plus',
-      home: Builder(
-        builder: (ctx) {
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('处理器与图形'),
-              actions: [
-                IconButton(
-                  onPressed: _loading ? null : _load,
-                  tooltip: '刷新',
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            body: SafeArea(child: _buildBody(ctx)),
-          );
-        },
+      title: 'Material Charts Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
       ),
+      home: const ChartsDemo(),
     );
   }
+}
 
-  Widget _buildBody(BuildContext ctx) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('读取失败：$_error', textAlign: TextAlign.center),
-        ),
-      );
-    }
-    final r = _report;
-    if (r == null) {
-      return const Center(child: Text('无数据'));
-    }
+class ChartsDemo extends StatefulWidget {
+  const ChartsDemo({super.key});
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _siliconHeroCard(ctx, r.siliconOverview),
-          const SizedBox(height: 16),
-          RepaintBoundary(child: _LiveFrequencyCard(plugin: _plugin)),
-          const SizedBox(height: 16),
-          _section(
-            ctx,
-            title: '运行概览',
-            children: [
-              _kvLine(ctx, '运行平台', r.platform.isEmpty ? '—' : r.platform),
-              if (r.apiLevel != null) _kvLine(ctx, 'API 级别', '${r.apiLevel}'),
-              _kvLine(ctx, '逻辑处理器', '${r.logicalProcessorCount} 个'),
-              _kvLine(ctx, '物理核心（估算）', '${r.physicalProcessorCount} 个'),
-              _kvLine(ctx, 'ABI', r.abis.isEmpty ? '—' : r.abis.join('、')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ExpansionTile(
-            initiallyExpanded: false,
-            title: const Text(
-              'GPU',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            subtitle: Text(
-              'Vendor / Renderer / Version',
-              style: TextStyle(color: Theme.of(ctx).colorScheme.outline),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _gpuRowsFromGpuInfo(ctx, r.gpuInfo),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ExpansionTile(
-            initiallyExpanded: false,
-            title: const Text(
-              '整机 Build',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _hardwareSummaryRows(ctx, r.hardwareSummary),
-                ),
-              ),
-            ],
-          ),
-        ],
+  @override
+  State<ChartsDemo> createState() => _ChartsDemoState();
+}
+
+class _ChartsDemoState extends State<ChartsDemo> {
+  int _selectedIndex = 0;
+
+  final List<Widget> _charts = [
+    const LineChartExample(),
+    const BarChartExample(),
+    const PieChartExample(),
+    const AreaChartExample(),
+    const MultiLineChartExample(),
+    const StackedBarChartExample(),
+    const HollowSemiCircleExample(),
+    const GanttChartExample(),
+    const CandlestickChartExample(),
+  ];
+
+  final List<String> _chartNames = [
+    'Line Chart',
+    'Bar Chart',
+    'Pie Chart',
+    'Area Chart',
+    'Multi-Line Chart',
+    'Stacked Bar Chart',
+    'Hollow Semi-Circle',
+    'Gantt Chart',
+    'Candlestick Chart',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_chartNames[_selectedIndex]),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-    );
-  }
-
-  Widget _siliconHeroCard(
-    BuildContext ctx,
-    SiliconOverview overview,
-  ) {
-    final codename = overview.socModel;
-    final socMfg = overview.socManufacturer;
-    final chain = overview.candidateChain;
-    final gpu = overview.gpu;
-
-    return Card(
-      elevation: 0,
-      color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.memory, color: Theme.of(ctx).colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'SoC 与 GPU（摘要）',
-                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _heroLine(ctx, '芯片代号', codename?.isNotEmpty == true ? codename! : '—'),
-            const SizedBox(height: 12),
-            _heroLine(ctx, 'SoC 制造商', socMfg?.isNotEmpty == true ? socMfg! : '—'),
-            const SizedBox(height: 12),
-            _heroLine(ctx, 'GPU', gpu.displayLine),
-            if (chain != null && chain.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text(
-                '候选串联（供核对）：',
-                style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(ctx).colorScheme.outline,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                chain,
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-              ),
-            ],
-          ],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: _charts[_selectedIndex],
         ),
       ),
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.shifting,
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        items: _chartNames
+            .map((name) => BottomNavigationBarItem(
+                  icon: const Icon(Icons.bar_chart),
+                  label: name,
+                  backgroundColor: Colors.blue,
+                ))
+            .toList(),
+      ),
     );
   }
+}
 
-  Widget _heroLine(BuildContext ctx, String label, String value) {
+// Line Chart Example
+class LineChartExample extends StatelessWidget {
+  const LineChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      const ChartData(value: 10, label: 'Jan'),
+      const ChartData(value: 25, label: 'Feb'),
+      const ChartData(value: 15, label: 'Mar'),
+      const ChartData(value: 30, label: 'Apr'),
+      const ChartData(value: 45, label: 'May'),
+      const ChartData(value: 35, label: 'Jun'),
+    ];
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
-                color: Theme.of(ctx).colorScheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
+        const Text(
+          'Monthly Sales Data',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 4),
-        SelectableText(
-          value,
-          style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+        const SizedBox(height: 20),
+        MaterialChartLine(
+          data: data,
+          width: 350,
+          height: 250,
+          style: const LineChartStyle(
+            lineColor: Colors.blue,
+            pointColor: Colors.red,
+            useCurvedLines: true,
+          ),
         ),
       ],
     );
   }
-
-  List<Widget> _gpuRowsFromGpuInfo(BuildContext ctx, GpuInfo g) {
-    final ordered = <(String label, String?)>[
-      ('API', g.api),
-      ('Vendor', g.vendor),
-      ('Renderer', g.renderer),
-      ('Version', g.version),
-      ('GLSL', g.shadingLanguageVersion),
-      ('说明', g.note),
-      ('错误', g.error),
-    ];
-    final rows = <Widget>[];
-    for (final (lb, val) in ordered) {
-      if (val == null || val.isEmpty) continue;
-      rows.add(_kvLine(ctx, lb, val));
-    }
-    return rows.isEmpty ? [const Text('无可用字段')] : rows;
-  }
-
-  List<Widget> _hardwareSummaryRows(BuildContext ctx, CpuHardwareSummary h) {
-    final ordered = <(String label, String?)>[
-      ('制造商', h.manufacturer),
-      ('品牌', h.brand),
-      ('设备代号', h.device),
-      ('型号', h.model),
-      ('主板', h.board),
-      ('Build.HARDWARE', h.hardware),
-      ('产品', h.product),
-      ('机器标识', h.machine),
-    ];
-    final rows = <Widget>[];
-    for (final (lb, val) in ordered) {
-      if (val == null || val.isEmpty) continue;
-      rows.add(_kvLine(ctx, lb, val));
-    }
-    return rows.isEmpty ? [const Text('暂无')] : rows;
-  }
-
-  Widget _section(
-    BuildContext context, {
-    required String title,
-    String? subtitle,
-    required List<Widget> children,
-  }) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _kvLine(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 112,
-            child: Text(
-              '$label：',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.primary,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Expanded(
-            child: SelectableText(
-              value.isEmpty ? '—' : value,
-              style: const TextStyle(fontSize: 14, height: 1.35),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-/// kHz（与插件约定一致）。
-String formatKhzLabel(int? kHz) {
-  if (kHz == null || kHz <= 0) return '—';
-  if (kHz >= 1000000) {
-    return '${(kHz / 1000000).toStringAsFixed(2)} GHz';
-  }
-  if (kHz >= 1000) {
-    return '${(kHz / 1000).toStringAsFixed(0)} MHz';
-  }
-  return '$kHz kHz';
-}
-
-/// 仅订阅 [CpuInfoPlus.watchFrequencyTelemetry]，局部重建，不占主列表 setState。
-class _LiveFrequencyCard extends StatelessWidget {
-  const _LiveFrequencyCard({required this.plugin});
-
-  final CpuInfoPlus plugin;
+// Bar Chart Example
+class BarChartExample extends StatelessWidget {
+  const BarChartExample({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<FrequencyTelemetry>(
-      stream: plugin.watchFrequencyTelemetry(
-        interval: const Duration(milliseconds: 1500),
-      ),
-      builder: (context, snapshot) {
-        final telemetry = snapshot.data;
-        final theme = Theme.of(context);
+    final data = [
+      const BarChartData(value: 20, label: 'Product A'),
+      const BarChartData(value: 35, label: 'Product B'),
+      const BarChartData(value: 25, label: 'Product C'),
+      const BarChartData(value: 40, label: 'Product D'),
+      const BarChartData(value: 30, label: 'Product E'),
+    ];
 
-        return Card(
-          elevation: 0,
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.speed_outlined, color: theme.colorScheme.secondary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '实时频率',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    Text(
-                      '间隔 1s · 单次采样含 CPU+GPU',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                    ),
-                  ],
-                ),
-                if (snapshot.connectionState == ConnectionState.waiting && telemetry == null)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 14),
-                    child: LinearProgressIndicator(minHeight: 2),
-                  ),
-                if (telemetry != null) ...[
-                  const SizedBox(height: 14),
-                  SelectableText.rich(
-                    TextSpan(
-                      style: theme.textTheme.titleMedium,
-                      children: [
-                        TextSpan(
-                          text: 'GPU：',
-                          style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
-                        ),
-                        TextSpan(text: formatKhzLabel(telemetry.gpuCurrentKhz)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...List<Widget>.generate(
-                    telemetry.cpu.currentHzPerCpu.length,
-                    (i) {
-                      final cur = i < telemetry.cpu.currentHzPerCpu.length
-                          ? telemetry.cpu.currentHzPerCpu[i]
-                          : null;
-                      final minV = i < telemetry.cpu.minHzPerCpu.length
-                          ? telemetry.cpu.minHzPerCpu[i]
-                          : null;
-                      final maxV = i < telemetry.cpu.maxHzPerCpu.length
-                          ? telemetry.cpu.maxHzPerCpu[i]
-                          : null;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: SelectableText(
-                          'CPU $i · 当前 ${formatKhzLabel(cur)} '
-                          '· 低 ${formatKhzLabel(minV)} · 高 ${formatKhzLabel(maxV)}',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      );
-                    },
-                  ),
-                  if (telemetry.error != null && telemetry.error!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        telemetry.error!,
-                        style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
-                      ),
-                    ),
-                ],
-              ],
-            ),
+    return Column(
+      children: [
+        const Text(
+          'Product Sales Comparison',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialBarChart(
+          data: data,
+          width: 350,
+          height: 300,
+          style: const BarChartStyle(
+            barColor: Colors.green,
+            gradientEffect: true,
+            gradientColors: [Colors.green, Colors.lightGreen],
           ),
-        );
-      },
+        ),
+      ],
+    );
+  }
+}
+
+// Pie Chart Example
+class PieChartExample extends StatelessWidget {
+  const PieChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      const PieChartData(value: 30, label: 'Mobile', color: Colors.blue),
+      const PieChartData(value: 25, label: 'Desktop', color: Colors.red),
+      const PieChartData(value: 20, label: 'Tablet', color: Colors.green),
+      const PieChartData(value: 15, label: 'Watch', color: Colors.orange),
+      const PieChartData(value: 10, label: 'Other', color: Colors.purple),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Device Usage Distribution',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialPieChart(
+          data: data,
+          width: 350,
+          height: 300,
+          style: const PieChartStyle(
+            showLegend: true,
+            legendPosition: PieChartLegendPosition.bottom,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Area Chart Example
+class AreaChartExample extends StatelessWidget {
+  const AreaChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      const AreaChartData(value: 10, label: 'Q1'),
+      const AreaChartData(value: 20, label: 'Q2'),
+      const AreaChartData(value: 15, label: 'Q3'),
+      const AreaChartData(value: 35, label: 'Q4'),
+    ];
+
+    final series = [
+      AreaChartSeries(
+        name: 'Revenue',
+        dataPoints: data,
+        color: Colors.blue,
+        gradientColor: Colors.blue.withValues(alpha: 0.3),
+      ),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Quarterly Revenue Trend',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialAreaChart(
+          series: series,
+          width: 350,
+          height: 250,
+        ),
+      ],
+    );
+  }
+}
+
+// Multi-Line Chart Example
+class MultiLineChartExample extends StatelessWidget {
+  const MultiLineChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final series = [
+      ChartSeries(
+        name: 'Sales',
+        dataPoints: const [
+          ChartDataPoint(value: 10, label: 'Jan'),
+          ChartDataPoint(value: 25, label: 'Feb'),
+          ChartDataPoint(value: 15, label: 'Mar'),
+          ChartDataPoint(value: 30, label: 'Apr'),
+        ],
+        color: Colors.blue,
+      ),
+      ChartSeries(
+        name: 'Profit',
+        dataPoints: const [
+          ChartDataPoint(value: 5, label: 'Jan'),
+          ChartDataPoint(value: 12, label: 'Feb'),
+          ChartDataPoint(value: 8, label: 'Mar'),
+          ChartDataPoint(value: 18, label: 'Apr'),
+        ],
+        color: Colors.green,
+      ),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Sales vs Profit Comparison',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MultiLineChart(
+          series: series,
+          style: const MultiLineChartStyle(
+            colors: [Colors.blue, Colors.green, Colors.red],
+            showLegend: true,
+          ),
+          height: 300,
+          width: 350,
+        ),
+      ],
+    );
+  }
+}
+
+// Stacked Bar Chart Example
+class StackedBarChartExample extends StatelessWidget {
+  const StackedBarChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      StackedBarData(
+        label: 'Q1',
+        segments: const [
+          StackedBarSegment(value: 10, color: Colors.red, label: 'Product A'),
+          StackedBarSegment(value: 15, color: Colors.blue, label: 'Product B'),
+          StackedBarSegment(value: 12, color: Colors.green, label: 'Product C'),
+        ],
+      ),
+      StackedBarData(
+        label: 'Q2',
+        segments: const [
+          StackedBarSegment(value: 15, color: Colors.red, label: 'Product A'),
+          StackedBarSegment(value: 20, color: Colors.blue, label: 'Product B'),
+          StackedBarSegment(value: 10, color: Colors.green, label: 'Product C'),
+        ],
+      ),
+      StackedBarData(
+        label: 'Q3',
+        segments: const [
+          StackedBarSegment(value: 12, color: Colors.red, label: 'Product A'),
+          StackedBarSegment(value: 18, color: Colors.blue, label: 'Product B'),
+          StackedBarSegment(value: 15, color: Colors.green, label: 'Product C'),
+        ],
+      ),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Quarterly Product Sales',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialStackedBarChart(
+          data: data,
+          width: 350,
+          height: 300,
+        ),
+      ],
+    );
+  }
+}
+
+// Hollow Semi-Circle Chart Example
+class HollowSemiCircleExample extends StatelessWidget {
+  const HollowSemiCircleExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Text(
+          'Goal Achievement',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialChartHollowSemiCircle(
+          percentage: 75,
+          size: 200,
+          hollowRadius: 0.6,
+          style: const ChartStyle(
+            activeColor: Colors.green,
+            inactiveColor: Colors.grey,
+            showPercentageText: true,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text('75% Complete'),
+      ],
+    );
+  }
+}
+
+// Gantt Chart Example
+class GanttChartExample extends StatelessWidget {
+  const GanttChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      GanttData(
+        startDate: DateTime(2024, 1, 1),
+        endDate: DateTime(2024, 2, 15),
+        label: 'Planning Phase',
+        color: Colors.blue,
+        description: 'Initial project planning and requirements gathering',
+      ),
+      GanttData(
+        startDate: DateTime(2024, 2, 1),
+        endDate: DateTime(2024, 4, 30),
+        label: 'Development Phase',
+        color: Colors.green,
+        description: 'Core development and implementation',
+      ),
+      GanttData(
+        startDate: DateTime(2024, 4, 15),
+        endDate: DateTime(2024, 5, 30),
+        label: 'Testing Phase',
+        color: Colors.orange,
+        description: 'Quality assurance and testing',
+      ),
+      GanttData(
+        startDate: DateTime(2024, 5, 20),
+        endDate: DateTime(2024, 6, 15),
+        label: 'Deployment',
+        color: Colors.red,
+        description: 'Production deployment and monitoring',
+      ),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Project Timeline',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialGanttChart(
+          data: data,
+          width: 350,
+          height: 300,
+        ),
+      ],
+    );
+  }
+}
+
+// Candlestick Chart Example
+class CandlestickChartExample extends StatelessWidget {
+  const CandlestickChartExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      CandlestickData(
+        date: DateTime(2024, 1, 1),
+        open: 100,
+        high: 110,
+        low: 95,
+        close: 105,
+      ),
+      CandlestickData(
+        date: DateTime(2024, 1, 2),
+        open: 105,
+        high: 115,
+        low: 100,
+        close: 108,
+      ),
+      CandlestickData(
+        date: DateTime(2024, 1, 3),
+        open: 108,
+        high: 120,
+        low: 102,
+        close: 112,
+      ),
+      CandlestickData(
+        date: DateTime(2024, 1, 4),
+        open: 112,
+        high: 118,
+        low: 108,
+        close: 115,
+      ),
+      CandlestickData(
+        date: DateTime(2024, 1, 5),
+        open: 115,
+        high: 125,
+        low: 110,
+        close: 120,
+      ),
+    ];
+
+    return Column(
+      children: [
+        const Text(
+          'Stock Price Movement',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+        MaterialCandlestickChart(
+          data: data,
+          width: 350,
+          height: 300,
+        ),
+      ],
     );
   }
 }
