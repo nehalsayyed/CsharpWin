@@ -54,15 +54,19 @@ jobs:
             ln -sf /lib/libc.musl-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 || true
 
             # Install Flutter SDK into /opt
+            echo '==> Downloading Flutter SDK...'
             mkdir -p /opt
             cd /opt
             curl -sSLf https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
 
-            # Setup Android SDK structure
+            # Setup Android SDK structure using updated Google tools bundle
+            echo '==> Downloading Android Command-Line Tools...'
             export ANDROID_SDK_ROOT=/opt/android-sdk
             mkdir -p \$ANDROID_SDK_ROOT/cmdline-tools
             cd \$ANDROID_SDK_ROOT/cmdline-tools
-            curl -sSLf https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline.zip
+            
+            # Updated working build link from Google
+            curl -sSLf https://dl.google.com/android/repository/commandlinetools-linux-12700392_latest.zip -o cmdline.zip
             unzip -q cmdline.zip
             mv cmdline-tools latest
             rm cmdline.zip
