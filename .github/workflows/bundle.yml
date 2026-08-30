@@ -1,19 +1,85 @@
-name: Build Fully-Offline Flutter APK Toolchain (Native ARM64)
+name: Build Compressed Ubuntu ARM64 QCOW2
 
 on:
-  workflow_dispatch:
-  push:
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
-  build:
+  build-image:
+    # Use native GitHub ARM64 runner for maximum speed
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Enable Multi-Arch Support & x86_64 Emulation
+      - name: Install Build Dependencies
         run: |
-            sudo apt update -y
-            sudo apt install cpu-checker -y
-            sudo kvm-ok
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils qemu-system-arm cloud-image-utils zstd
+
+      - name: Download Official Ubuntu ARM64 Cloud Image
+        run: |
+          # Fetch modern Ubuntu Noble (24.04) or change to Focal (20.04) / Jammy (22.04)
+          wget https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img -O base.qcow2
+
+      - name: Create Cloud-Init Config (Auto-provision Root & Password)
+        run: |
+          cat << 'EOF' > user-data
+          #cloud-config
+          user: ubuntu
+          password: ubuntu
+          chpasswd: { expire: False }
+          ssh_pwauth: True
+          bootcmd:
+            - echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+          runcmd:
+            # Pre-configure basic packages, DNS, and mirror settings
+            - apt-get update
+            - apt-get install -y curl wget htop openssh-server sudo
+            # Clean up immediately inside guest to save space
+            - apt-get clean
+            - rm -rf /var/lib/apt/lists/*
+          EOF
+
+          touch meta-data
+          cloud-localds cloud-init.iso user-data meta-data
+
+      - name: Resize Disk and Provision via QEMU
+        run: |
+          # Expand disk to 10GB for software installation room
+          qemu-img resize base.qcow2 10G
+
+          # Run QEMU headless to execute cloud-init (Uses KVM on native arm64 runner)
+          qemu-system-aarch64 \
+            -enable-kvm \
+            -M virt \
+            -cpu host \
+            -m 2048 \
+            -nographic \
+            -drive file=base.qcow2,format=qcow2,if=virtio \
+            -drive file=cloud-init.iso,format=raw,if=virtio \
+            -netdev user,id=net0 -device virtio-net-pci,netdev=net0 &
+
+          # Wait for provisioning to finish (checking SSH or Cloud-init completion)
+          echo "Waiting 60 seconds for installation to complete..."
+          sleep 60
+          pkill -f qemu-system-aarch64 || true
+
+      - name: Shrink, Minify, and Compress Image
+        run: |
+          # 1. Zero out empty space for maximum compression
+          sudo apt-get install -y guestfs-tools || true
+          
+          # Compact qcow2 allocation internally
+          qemu-img convert -f qcow2 -O qcow2 -c base.qcow2 ubuntu-arm64-installed.qcow2
+
+          # Pack into a ultra-compressed tar archive using zstd
+          tar -I 'zstd --ultra -22' -cvf ubuntu-arm64-termux.tar.zst ubuntu-arm64-installed.qcow2
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-arm64-qcow2
+          path: ubuntu-arm64-termux.tar.zst
+          retention-days: 7
+          
