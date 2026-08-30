@@ -37,7 +37,7 @@ jobs:
           
           cd nehalapp
           flutter pub get
-          flutter pub add cpu_info_plus
+          flutter pub add material_charts
           
           # Build highly optimized, arm64-v8a specific APK
           flutter build apk \
