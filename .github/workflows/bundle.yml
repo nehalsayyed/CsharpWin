@@ -12,44 +12,32 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build Alpine-Based Offline RootFS
+      - name: Build RootFS inside Alpine Container
         run: |
           set -e
 
-          # Install host dependencies
-          sudo apt-get update
-          sudo apt-get install -y tar xz-utils curl
+          # Create work directory on runner
+          BUILD_DIR="$(pwd)/build_rootfs"
+          ROOTFS_OUT="$(pwd)/rootfs_export"
+          mkdir -p "$BUILD_DIR" "$ROOTFS_OUT"
 
-          ROOTFS_DIR="$(pwd)/alpine-rootfs"
-          mkdir -p "$ROOTFS_DIR"
-
-          echo "==> Downloading Alpine Linux 3.24.1 ARM64 Mini RootFS..."
-          curl -sSLf "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.1-aarch64.tar.gz" -o alpine-rootfs.tar.gz
-
-          echo "==> Extracting Alpine RootFS..."
-          tar -xzf alpine-rootfs.tar.gz -C "$ROOTFS_DIR"
-          rm alpine-rootfs.tar.gz
-
-          echo "==> Setting up Chroot mounts..."
-          sudo mount --bind /dev "$ROOTFS_DIR/dev"
-          sudo mount --bind /proc "$ROOTFS_DIR/proc"
-          sudo mount --bind /sys "$ROOTFS_DIR/sys"
-          echo "nameserver 8.8.8.8" | sudo tee "$ROOTFS_DIR/etc/resolv.conf"
-
-          echo "==> Configuring and Packing Environment inside Chroot..."
-          sudo chroot "$ROOTFS_DIR" /bin/sh -c "
+          # Execute full environment preparation inside an isolated Docker Alpine container
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "$BUILD_DIR:/export" \
+            arm64v8/alpine:3.20 /bin/sh -c "
             set -e
 
-            # Enable main and community repositories for Alpine 3.24
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' > /etc/apk/repositories
-            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' >> /etc/apk/repositories
+            echo '==> Updating Alpine Repositories...'
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/main' > /etc/apk/repositories
+            echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/community' >> /etc/apk/repositories
 
             apk update
             apk add --no-cache \
               bash curl git unzip xz libstdc++ gcompat \
               openjdk17-jdk ca-certificates shadow sudo
 
-            # Fix glibc shared library paths for Dart/Flutter engine execution on Alpine
+            # Fix glibc shared library paths for Dart/Flutter binary runtimes
             mkdir -p /lib64
             ln -sf /lib/libc.musl-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 || true
 
@@ -59,13 +47,11 @@ jobs:
             cd /opt
             curl -sSLf https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_arm64_stable.tar.xz | tar -xJ
 
-            # Setup Android SDK structure using updated Google tools bundle
+            # Setup Android SDK structure
             echo '==> Downloading Android Command-Line Tools...'
             export ANDROID_SDK_ROOT=/opt/android-sdk
             mkdir -p \$ANDROID_SDK_ROOT/cmdline-tools
             cd \$ANDROID_SDK_ROOT/cmdline-tools
-            
-            # Updated working build link from Google
             curl -sSLf https://dl.google.com/android/repository/commandlinetools-linux-12700392_latest.zip -o cmdline.zip
             unzip -q cmdline.zip
             mv cmdline-tools latest
@@ -103,22 +89,21 @@ jobs:
               flutter precache --android --no-web --no-linux --no-windows --no-fuchsia
             \"
 
-            # Cleanup caches to preserve target size
+            # Cleanup build bloat
             rm -rf /var/cache/apk/*
             rm -rf /tmp/* /var/tmp/*
             rm -rf /opt/flutter/bin/cache/downloads/*
             rm -rf /opt/flutter/docs /opt/flutter/examples
             rm -rf /root/.cache /home/developer/.cache
-          "
 
-          echo "==> Unmounting system mounts..."
-          sudo umount "$ROOTFS_DIR/dev"
-          sudo umount "$ROOTFS_DIR/proc"
-          sudo umount "$ROOTFS_DIR/sys"
+            echo '==> Copying root filesystem structure to export directory...'
+            cp -rp /bin /etc /home /lib /lib64 /media /mnt /opt /root /run /sbin /srv /usr /var /export/
+            mkdir -p /export/dev /export/proc /export/sys /export/tmp
+            "
 
-          echo "==> Compressing into high-ratio tarball..."
-          XZ_OPT="-8e -T0" sudo tar --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' \
-            -cJf "offline-flutter-apk-arm64.tar.xz" -C "$ROOTFS_DIR" .
+          echo "==> Compressing exported container filesystem into high-ratio xz archive..."
+          sudo apt-get update && sudo apt-get install -y xz-utils
+          XZ_OPT="-8e -T0" sudo tar -cJf "offline-flutter-apk-arm64.tar.xz" -C "$BUILD_DIR" .
 
       - name: Upload RootFS Artifact
         uses: actions/upload-artifact@v4
