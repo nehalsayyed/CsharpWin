@@ -15,7 +15,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
             curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
-            android create --name Nehal --template "Empty Views Activity" -o Nehal
+            android create --name Nehal -o Nehal "Empty Views Activity"
             cd Nehal
             ./gradlew assembleDebug 
 
